@@ -1,0 +1,28 @@
+{
+  "name": "flashscore-volleyball-scraper",
+  "version": "1.0.0",
+  "description": "Scraper for FlashScore volleyball matches with Google Sheets integration",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "scrape": "node src/index.js",
+    "scrape-only": "node src/index.js --scrape-only",
+    "test-scraper": "node src/test-scraper.js",
+    "docker:build": "docker build -t flashscore-scraper .",
+    "docker:run": "docker run --rm --env-file .env -v $(pwd)/credentials.json:/app/credentials.json:ro flashscore-scraper",
+    "docker:run-scrape": "docker run --rm --env-file .env -v $(pwd)/credentials.json:/app/credentials.json:ro -v $(pwd)/output:/app/output flashscore-scraper node src/index.js --scrape-only"
+  },
+  "keywords": [
+    "flashscore",
+    "volleyball",
+    "scraper",
+    "google-sheets"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "googleapis": "^170.1.0",
+    "playwright": "^1.57.0"
+  }
+}

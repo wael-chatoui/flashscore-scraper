@@ -1,0 +1,38 @@
+# Node.js
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+
+# Credentials (important - don't commit secrets)
+credentials.json
+
+# Output files
+output/*.json
+!output/.gitkeep
+!package.json
+!package-lock.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test outputs
+test-results.json

@@ -1,0 +1,16 @@
+En résumé rapide :
+Le client fait du trading sportif volleyball. Il a besoin d'automatiser la collecte de stats sur les matchs du jour.
+Ce qu'il faut scraper (par match) :
+
+Infos de base : date, heure, pays, ligue, équipes, classements
+3 blocs de stats (le cœur du projet) :
+
+Section DERNIERS MATCHS: [ÉQUIPE A] → compter combien de matchs en 3, 4, 5 sets
+Section DERNIERS MATCHS: [ÉQUIPE B] → idem
+Section CONFRONTATIONS (A vs B) → idem
+
+
+
+Pour chaque section, cliquer Montrer plus de matchs jusqu'à avoir ~50 matchs max, puis compter la répartition des sets.
+Bonne nouvelle : J'ai déjà analysé le site. Les données sont pré-chargées dans le DOM, le bouton Montrer plus ne fait aucun appel API — il révèle juste les éléments masqués en CSS. Donc scraping simple avec Puppeteer/Playwright.
+Injection Google Sheets : uniquement sur les colonnes vertes (#00ff00), le reste ce sont des formules Excel du client.

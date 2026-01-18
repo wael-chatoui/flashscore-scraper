@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+.env
+credentials.json
+*.pdf
+*.csv
+*.json
+!package*.json
+output/
+.git
+.gitignore

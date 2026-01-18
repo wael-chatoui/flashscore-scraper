@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  scraper:
+    build: .
+    container_name: flashscore-volleyball-scraper
+    environment:
+      # Google Sheets configuration
+      - SPREADSHEET_ID=${SPREADSHEET_ID}
+      - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON}
+
+      # Scraper settings
+      - HEADLESS=true
+      - REQUEST_DELAY=1000
+      - MAX_MATCHES=0
+
+      # Sheet configuration
+      # Use 'TRI BASE OU 4' (from brief) or 'CALCUL SET' (from CSV)
+      - SHEET_PRESET=${SHEET_PRESET:-TRI BASE OU 4}
+      - SHEET_TAB_NAME=${SHEET_TAB_NAME:-}
+      - START_ROW=${START_ROW:-2}
+
+    # Mount credentials file if using file-based auth
+    volumes:
+      - ./credentials.json:/app/credentials.json:ro
+      - ./output:/app/output
+
+    # For cron scheduling, use restart policy
+    restart: "no"
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  # Optional: Scheduled runner using ofelia (cron for Docker)
+  scheduler:
+    image: mcuadros/ofelia:latest
+    container_name: flashscore-scheduler
+    depends_on:
+      - scraper
+    command: daemon --docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      ofelia.job-run.scraper.schedule: "0 8 * * *"  # Run at 8:00 AM daily
+      ofelia.job-run.scraper.container: "flashscore-volleyball-scraper"
+    profiles:
+      - scheduled  # Only start with: docker compose --profile scheduled up
