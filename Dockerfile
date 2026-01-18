@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
 
 WORKDIR /app
 
@@ -13,6 +13,9 @@ RUN playwright install chromium
 
 # Copy source code
 COPY src/ ./src/
+
+# Create output directory
+RUN mkdir -p /app/output
 
 # Create non-root user for security
 RUN useradd -m -s /bin/bash scraper

@@ -8,6 +8,7 @@ services:
       # Google Sheets configuration
       - SPREADSHEET_ID=${SPREADSHEET_ID}
       - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON}
+      - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
 
       # Scraper settings
       - HEADLESS=true
@@ -23,7 +24,7 @@ services:
     # Mount credentials file if using file-based auth
     volumes:
       - ./credentials.json:/app/credentials.json:ro
-      - ./output:/app/output
+      - ./output:/app/src/output
 
     # For cron scheduling, use restart policy
     restart: "no"
