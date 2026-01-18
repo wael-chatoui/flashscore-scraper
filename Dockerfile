@@ -1,12 +1,15 @@
-FROM mcr.microsoft.com/playwright:v1.49.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy requirements file
+COPY requirements.txt ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Playwright browsers
+RUN playwright install chromium
 
 # Copy source code
 COPY src/ ./src/
@@ -16,5 +19,8 @@ RUN useradd -m -s /bin/bash scraper
 RUN chown -R scraper:scraper /app
 USER scraper
 
+# Set working directory to src for imports
+WORKDIR /app/src
+
 # Default command
-CMD ["node", "src/index.js"]
+CMD ["python", "main.py"]

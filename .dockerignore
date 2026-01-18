@@ -1,11 +1,31 @@
-node_modules
-npm-debug.log
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+env
+*.egg-info
+dist
+build
+
+# Environment and credentials
 .env
 credentials.json
+
+# Data files
 *.pdf
 *.csv
 *.json
-!package*.json
+!requirements.txt
+
+# Output
 output/
+
+# Git
 .git
 .gitignore
+
+# IDE
+.idea
+.vscode
