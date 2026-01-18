@@ -10,13 +10,12 @@ import sys
 from scraper import scrape_flashscore
 
 
-async def test() -> None:
-    """Run scraper test with visible browser"""
-    print('Testing FlashScore scraper (headless=False for debugging)...\n')
+async def test(headless: bool = True) -> None:
+    """Run scraper test"""
+    print(f'Testing FlashScore scraper (headless={headless})...\n')
 
     try:
-        # Run with visible browser for testing
-        matches = await scrape_flashscore(headless=False)
+        matches = await scrape_flashscore(headless=headless)
 
         print('\n' + '=' * 60)
         print(f'Found {len(matches)} matches')
@@ -43,4 +42,6 @@ async def test() -> None:
 
 
 if __name__ == '__main__':
-    asyncio.run(test())
+    # Use --visible flag to show browser
+    headless = '--visible' not in sys.argv
+    asyncio.run(test(headless=headless))
