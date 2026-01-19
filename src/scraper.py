@@ -112,6 +112,8 @@ async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]
         league_url.replace('-femmes', '-women').replace('-hommes', '-men'),
         league_url.replace('-women', '-femmes').replace('-men', '-hommes'),
         league_url.replace('feminine', 'women').replace('masculin', 'men'),
+        league_url.replace('liga-femmes', 'liga-women'),
+        league_url.replace('liga-women', 'liga-femmes'),
     ]
     # Remove duplicates while preserving order
     url_alternatives = list(dict.fromkeys(url_alternatives))
@@ -122,13 +124,10 @@ async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]
         standings_url = f'{url.rstrip("/")}/classement/'
 
         try:
-            response = await page.goto(standings_url, wait_until='domcontentloaded', timeout=20000)
-            await page.wait_for_timeout(3000)
 
-            # Check if page loaded successfully (not error page)
-            page_text = await page.inner_text('body')
-            if 'Erreur' in page_text or len(page_text) < 200:
-                continue
+            # Use domcontentloaded with longer wait - more reliable than networkidle
+            await page.goto(standings_url, wait_until='domcontentloaded', timeout=30000)
+            await page.wait_for_timeout(5000)  # Extra wait for table to render
 
             # Extract standings using the table structure
             data = await page.evaluate('''() => {
@@ -153,14 +152,23 @@ async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]
             }''')
 
             for item in data:
-                # Store with lowercase key for case-insensitive matching
-                rankings[item['team'].lower()] = item['rank']
+                # Store with both original lowercase and normalized keys for better matching
+                team_lower = item['team'].lower()
+                rankings[team_lower] = item['rank']
+                # Also store normalized version (without suffixes like " f", " w")
+                normalized = team_lower
+                for suffix in [' f', ' w', ' (f)', ' (w)', ' femmes', ' women']:
+                    if normalized.endswith(suffix):
+                        normalized = normalized[:-len(suffix)]
+                        break
+                if normalized != team_lower:
+                    rankings[normalized] = item['rank']
 
             if rankings:
                 print(f'  Found {len(rankings)} teams in standings')
                 break  # Success, no need to try other URLs
 
-        except Exception as e:
+        except Exception:
             continue  # Try next URL alternative
 
     return rankings
@@ -229,6 +237,7 @@ async def extract_today_matches(page: Page) -> list[Match]:
         const results = [];
         let currentCountry = '';
         let currentLeague = '';
+        let currentLeagueUrl = '';
 
         // Get all elements in the event container
         const container = document.querySelector('.leagues--live, .event, [class*="sportName"]')?.parentElement || document.body;
@@ -240,13 +249,12 @@ async def extract_today_matches(page: Page) -> list[Match]:
                 const titleEl = el.querySelector('.headerLeague__title-text, [class*="title-text"], [class*="titleText"]');
                 if (titleEl) {
                     const fullTitle = titleEl.textContent?.trim() || '';
-                    // Extract country from flag title or parse from text
-                    const flagEl = el.querySelector('[class*="flag"]');
-                    const flagTitle = flagEl?.getAttribute('title') || '';
+                    // Extract country from category text
+                    const categoryEl = el.querySelector('.headerLeague__category-text, [class*="category-text"]');
+                    const categoryText = categoryEl?.textContent?.trim() || '';
 
-                    if (flagTitle) {
-                        // Flag title format: "Country" or contains country name
-                        currentCountry = flagTitle.split('(')[0]?.trim() || flagTitle;
+                    if (categoryText) {
+                        currentCountry = categoryText;
                         currentLeague = fullTitle;
                     } else {
                         // Try to split "Country: League" format
@@ -256,6 +264,16 @@ async def extract_today_matches(page: Page) -> list[Match]:
                             currentLeague = parts.slice(1).join(':').trim();
                         } else {
                             currentLeague = fullTitle;
+                        }
+                    }
+
+                    // Extract league URL from the header link
+                    const leagueLink = el.querySelector('a.headerLeague__title, a[href*="/volleyball/"]');
+                    if (leagueLink) {
+                        const href = leagueLink.getAttribute('href') || '';
+                        // Only use league URLs (not match URLs)
+                        if (href && !href.includes('/match/')) {
+                            currentLeagueUrl = href;
                         }
                     }
                 }
@@ -275,20 +293,10 @@ async def extract_today_matches(page: Page) -> list[Match]:
                 const href = linkEl?.getAttribute('href') || '';
 
                 if (teamA && teamB) {
-                    // Get league URL from the header link
-                    let leagueUrl = '';
-                    const headerEl = el.previousElementSibling;
-                    if (headerEl) {
-                        const leagueLink = headerEl.querySelector('a[href*="/volleyball/"]');
-                        if (leagueLink) {
-                            leagueUrl = leagueLink.getAttribute('href') || '';
-                        }
-                    }
-
                     results.push({
                         country: currentCountry,
                         league: currentLeague,
-                        leagueUrl,
+                        leagueUrl: currentLeagueUrl,
                         teamA,
                         teamB,
                         time,
