@@ -15,27 +15,37 @@ from config import config
 
 # Column mapping - configurable based on actual sheet structure
 #
-# From the PDF brief (tab "TRI BASE OU 4"):
-# - Match info: A-H (Date, Time, Country, League, Team A, Rank A, Team B, Rank B)
-# - Team A stats: M, N, O (3, 4, 5 sets)
-# - Team B stats: X, Y, Z (3, 4, 5 sets)
-# - H2H stats: AJ, AK, AL (3, 4, 5 sets)
+# Actual sheet layout for "TRI BASE O/U 4":
+# - A: Date
+# - B-H: Formula columns (averages, computed values) - DO NOT OVERWRITE
+# - I: Status/Time (e.g., "Terminé", "20:00")
+# - J: Country (PAYS)
+# - K: League
+# - L: Team A name (EQUIPE A)
+# - M: Team A rank (P) - "not found" since FlashScore doesn't provide rankings
+# - N: Team B name (EQUIPE B)
+# - O: Team B rank (P) - "not found" since FlashScore doesn't provide rankings
+# - T, U, V: Team A stats (3, 4, 5 sets)
+# - AE, AF, AG: Team B stats (3, 4, 5 sets)
+# - AJ, AK, AL: H2H stats (3, 4, 5 sets)
 #
-# From the CSV analysis (tab "CALCUL SET"):
+# Alternative mapping for "CALCUL SET":
 # - Team A stats: C, D, E
 # - Team B stats: I, J, K
 # - H2H stats: O, P, Q
 
 COLUMN_PRESETS = {
-    # Original mapping from PDF brief
+    # Corrected mapping based on actual sheet structure
+    # Sheet columns: A=DATE, I=Status, J=PAYS, K=LEAGUE, L=EQUIPE A, M=Rank A, N=EQUIPE B, O=Rank B
+    # Stats: T-V=Team A (3,4,5 sets), AE-AG=Team B (3,4,5 sets), AJ-AL=H2H (3,4,5 sets)
     'TRI BASE OU 4': {
         'sheetName': 'TRI BASE O/U 4',
         'matchInfo': {
-            'date': 'A', 'time': 'B', 'country': 'C', 'league': 'D',
-            'teamA': 'E', 'rankA': 'F', 'teamB': 'G', 'rankB': 'H'
+            'date': 'A', 'time': 'I', 'country': 'J', 'league': 'K',
+            'teamA': 'L', 'rankA': 'M', 'teamB': 'N', 'rankB': 'O'
         },
-        'teamA': {'set3': 'M', 'set4': 'N', 'set5': 'O'},
-        'teamB': {'set3': 'X', 'set4': 'Y', 'set5': 'Z'},
+        'teamA': {'set3': 'T', 'set4': 'U', 'set5': 'V'},
+        'teamB': {'set3': 'AE', 'set4': 'AF', 'set5': 'AG'},
         'h2h': {'set3': 'AJ', 'set4': 'AK', 'set5': 'AL'}
     },
     # Alternative mapping based on CSV structure
@@ -102,28 +112,36 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
     value_ranges = []
     end_row = start_row + len(match_data) - 1
 
-    # Match info (A-H) - only if preset supports it
+    # Match info - handle both contiguous and non-contiguous columns
     if preset.get('matchInfo'):
         match_info = preset['matchInfo']
+
+        # Date column (A) - separate because B-H have formulas
+        date_values = [[m.get('date', '') or 'not found'] for m in match_data]
+        value_ranges.append({
+            'range': f"'{sheet_name}'!{match_info['date']}{start_row}:{match_info['date']}{end_row}",
+            'values': date_values
+        })
+
+        # Time through RankB columns (I-O) - contiguous block
         match_info_values = [
             [
-                m.get('date', ''),
-                m.get('time', ''),
-                m.get('country', ''),
-                m.get('league', ''),
-                m.get('teamA', ''),
-                m.get('rankA', ''),
-                m.get('teamB', ''),
-                m.get('rankB', '')
+                m.get('time', '') or 'not found',
+                m.get('country', '') or 'not found',
+                m.get('league', '') or 'not found',
+                m.get('teamA', '') or 'not found',
+                m.get('rankA', '') or 'not found',
+                m.get('teamB', '') or 'not found',
+                m.get('rankB', '') or 'not found'
             ]
             for m in match_data
         ]
         value_ranges.append({
-            'range': f"'{sheet_name}'!{match_info['date']}{start_row}:{match_info['rankB']}{end_row}",
+            'range': f"'{sheet_name}'!{match_info['time']}{start_row}:{match_info['rankB']}{end_row}",
             'values': match_info_values
         })
 
-    # Team A stats
+    # Team A stats (0 = no data available, keeps formulas working)
     team_a_values = [
         [
             m.get('teamAStats', {}).get('count3', 0),
@@ -137,7 +155,7 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
         'values': team_a_values
     })
 
-    # Team B stats
+    # Team B stats (0 = no data available, keeps formulas working)
     team_b_values = [
         [
             m.get('teamBStats', {}).get('count3', 0),
@@ -151,7 +169,7 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
         'values': team_b_values
     })
 
-    # H2H stats
+    # H2H stats (0 = no H2H history between teams, keeps formulas working)
     h2h_values = [
         [
             m.get('h2hStats', {}).get('count3', 0),
@@ -177,7 +195,10 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
     print(f'Successfully injected {len(match_data)} matches')
     print('Columns updated:')
     if preset.get('matchInfo'):
-        print(f"  - Match info: {preset['matchInfo']['date']}-{preset['matchInfo']['rankB']}")
+        mi = preset['matchInfo']
+        print(f"  - Date: {mi['date']}")
+        print(f"  - Match info: {mi['time']}-{mi['rankB']} (time, country, league, teams, ranks)")
     print(f"  - Team A stats: {preset['teamA']['set3']}-{preset['teamA']['set5']}")
     print(f"  - Team B stats: {preset['teamB']['set3']}-{preset['teamB']['set5']}")
     print(f"  - H2H stats: {preset['h2h']['set3']}-{preset['h2h']['set5']}")
+    print('Note: Text fields use "not found" when unavailable, stats use 0')
