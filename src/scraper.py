@@ -100,6 +100,82 @@ async def count_sets_in_section(section: ElementHandle) -> SetStats:
     return {'count3': count3, 'count4': count4, 'count5': count5}
 
 
+async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]:
+    """
+    Scrape team standings/rankings for a league.
+    Returns a dict mapping team name (lowercase) to rank.
+    """
+    standings_url = f'{league_url.rstrip("/")}/classement/'
+    rankings: dict[str, int] = {}
+
+    try:
+        await page.goto(standings_url, wait_until='domcontentloaded', timeout=30000)
+        await page.wait_for_timeout(5000)  # Wait for dynamic content
+
+        # Extract standings using the table structure
+        data = await page.evaluate('''() => {
+            const rows = document.querySelectorAll('.ui-table__row');
+            const standings = [];
+
+            rows.forEach(row => {
+                const rankEl = row.querySelector('.tableCellRank');
+                const teamEl = row.querySelector('.tableCellParticipant__name');
+
+                if (rankEl && teamEl) {
+                    const rankText = rankEl.textContent?.trim().replace('.', '');
+                    const rank = parseInt(rankText) || 0;
+                    const team = teamEl.textContent?.trim() || '';
+                    if (rank > 0 && team) {
+                        standings.push({rank, team});
+                    }
+                }
+            });
+
+            return standings;
+        }''')
+
+        for item in data:
+            # Store with lowercase key for case-insensitive matching
+            rankings[item['team'].lower()] = item['rank']
+
+        if rankings:
+            print(f'  Found {len(rankings)} teams in standings')
+
+    except Exception as e:
+        print(f'  Could not fetch standings for {standings_url}: {e}')
+
+    return rankings
+
+
+def normalize_team_name(name: str) -> str:
+    """Normalize team name for matching (lowercase, remove common suffixes)."""
+    name = name.lower().strip()
+    # Remove common suffixes
+    for suffix in [' f', ' w', ' (f)', ' (w)', ' femmes', ' women']:
+        if name.endswith(suffix):
+            name = name[:-len(suffix)]
+    return name
+
+
+def find_team_rank(team_name: str, standings: dict[str, int]) -> str:
+    """Find team rank from standings, trying various name matches."""
+    if not standings:
+        return ''
+
+    normalized = normalize_team_name(team_name)
+
+    # Try exact match first
+    if normalized in standings:
+        return str(standings[normalized])
+
+    # Try partial matching (team name contains or is contained in standings name)
+    for standing_team, rank in standings.items():
+        if normalized in standing_team or standing_team in normalized:
+            return str(rank)
+
+    return ''
+
+
 async def click_show_more_buttons(page: Page) -> None:
     """
     Click all "Montrer plus" buttons to reveal hidden matches
@@ -180,9 +256,20 @@ async def extract_today_matches(page: Page) -> list[Match]:
                 const href = linkEl?.getAttribute('href') || '';
 
                 if (teamA && teamB) {
+                    // Get league URL from the header link
+                    let leagueUrl = '';
+                    const headerEl = el.previousElementSibling;
+                    if (headerEl) {
+                        const leagueLink = headerEl.querySelector('a[href*="/volleyball/"]');
+                        if (leagueLink) {
+                            leagueUrl = leagueLink.getAttribute('href') || '';
+                        }
+                    }
+
                     results.push({
                         country: currentCountry,
                         league: currentLeague,
+                        leagueUrl,
                         teamA,
                         teamB,
                         time,
@@ -215,6 +302,7 @@ async def extract_today_matches(page: Page) -> list[Match]:
             'time': data.get('time', ''),
             'country': data.get('country', ''),
             'league': data.get('league', ''),
+            'leagueUrl': data.get('leagueUrl', ''),  # Used internally to fetch standings
             'teamA': data['teamA'],
             'rankA': '',
             'teamB': data['teamB'],
@@ -309,7 +397,30 @@ async def scrape_flashscore(headless: bool = True) -> list[MatchWithStats]:
             matches = await extract_today_matches(page)
             print(f'Found {len(matches)} matches')
 
-            # Step 2: For each match, get H2H stats
+            # Step 2: Fetch standings for each unique league to get rankings
+            print("Fetching league standings for rankings...")
+            league_standings: dict[str, dict[str, int]] = {}
+            seen_leagues: set[str] = set()
+
+            for match in matches:
+                league_url = match.get('leagueUrl', '')
+                if league_url and league_url not in seen_leagues:
+                    seen_leagues.add(league_url)
+                    full_url = f'{BASE_URL}{league_url}' if not league_url.startswith('http') else league_url
+                    print(f'  Fetching standings for: {match.get("league", league_url)}')
+                    standings = await scrape_league_standings(page, full_url)
+                    if standings:
+                        league_standings[league_url] = standings
+                    await page.wait_for_timeout(500)
+
+            # Step 3: Apply rankings to matches
+            for match in matches:
+                league_url = match.get('leagueUrl', '')
+                standings = league_standings.get(league_url, {})
+                match['rankA'] = find_team_rank(match['teamA'], standings)
+                match['rankB'] = find_team_rank(match['teamB'], standings)
+
+            # Step 4: For each match, get H2H stats
             results: list[MatchWithStats] = []
             max_matches = config.scraper.max_matches or len(matches)
             matches_to_process = matches[:max_matches] if max_matches > 0 else matches
@@ -317,15 +428,18 @@ async def scrape_flashscore(headless: bool = True) -> list[MatchWithStats]:
             for i, match in enumerate(matches_to_process):
                 print(f"Processing match {i + 1}/{len(matches_to_process)}: {match['teamA']} vs {match['teamB']}")
 
+                # Remove internal leagueUrl field from output
+                match_data = {k: v for k, v in match.items() if k != 'leagueUrl'}
+
                 if match['matchUrl']:
                     stats = await scrape_h2h_stats(page, match['matchUrl'])
                     results.append({
-                        **match,
+                        **match_data,
                         **stats
                     })
                 else:
                     results.append({
-                        **match,
+                        **match_data,
                         'teamAStats': {'count3': 0, 'count4': 0, 'count5': 0},
                         'teamBStats': {'count3': 0, 'count4': 0, 'count5': 0},
                         'h2hStats': {'count3': 0, 'count4': 0, 'count5': 0}
