@@ -212,13 +212,13 @@ async def extract_today_matches(page: Page) -> list[Match]:
 
         matches.append({
             'date': date_str,
-            'time': data.get('time', '') or 'not found',
-            'country': data.get('country', '') or 'not found',
-            'league': data.get('league', '') or 'not found',
+            'time': data.get('time', ''),
+            'country': data.get('country', ''),
+            'league': data.get('league', ''),
             'teamA': data['teamA'],
-            'rankA': 'not found',  # Rankings not available on FlashScore main page
+            'rankA': '',
             'teamB': data['teamB'],
-            'rankB': 'not found',  # Rankings not available on FlashScore main page
+            'rankB': '',
             'matchUrl': match_url
         })
 

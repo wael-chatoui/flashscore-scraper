@@ -22,9 +22,9 @@ from config import config
 # - J: Country (PAYS)
 # - K: League
 # - L: Team A name (EQUIPE A)
-# - M: Team A rank (P) - "not found" since FlashScore doesn't provide rankings
+# - M: Team A rank (P)
 # - N: Team B name (EQUIPE B)
-# - O: Team B rank (P) - "not found" since FlashScore doesn't provide rankings
+# - O: Team B rank (P)
 # - T, U, V: Team A stats (3, 4, 5 sets)
 # - AE, AF, AG: Team B stats (3, 4, 5 sets)
 # - AJ, AK, AL: H2H stats (3, 4, 5 sets)
@@ -117,7 +117,7 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
         match_info = preset['matchInfo']
 
         # Date column (A) - separate because B-H have formulas
-        date_values = [[m.get('date', '') or 'not found'] for m in match_data]
+        date_values = [[m.get('date', '')] for m in match_data]
         value_ranges.append({
             'range': f"'{sheet_name}'!{match_info['date']}{start_row}:{match_info['date']}{end_row}",
             'values': date_values
@@ -126,13 +126,13 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
         # Time through RankB columns (I-O) - contiguous block
         match_info_values = [
             [
-                m.get('time', '') or 'not found',
-                m.get('country', '') or 'not found',
-                m.get('league', '') or 'not found',
-                m.get('teamA', '') or 'not found',
-                m.get('rankA', '') or 'not found',
-                m.get('teamB', '') or 'not found',
-                m.get('rankB', '') or 'not found'
+                m.get('time', ''),
+                m.get('country', ''),
+                m.get('league', ''),
+                m.get('teamA', ''),
+                m.get('rankA', ''),
+                m.get('teamB', ''),
+                m.get('rankB', '')
             ]
             for m in match_data
         ]
@@ -201,4 +201,3 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
     print(f"  - Team A stats: {preset['teamA']['set3']}-{preset['teamA']['set5']}")
     print(f"  - Team B stats: {preset['teamB']['set3']}-{preset['teamB']['set5']}")
     print(f"  - H2H stats: {preset['h2h']['set3']}-{preset['h2h']['set5']}")
-    print('Note: Text fields use "not found" when unavailable, stats use 0')
