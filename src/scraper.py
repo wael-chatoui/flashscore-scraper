@@ -104,45 +104,64 @@ async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]
     """
     Scrape team standings/rankings for a league.
     Returns a dict mapping team name (lowercase) to rank.
+    Tries alternative URL patterns if primary fails.
     """
-    standings_url = f'{league_url.rstrip("/")}/classement/'
+    # URL translations for common French/English variations
+    url_alternatives = [
+        league_url,
+        league_url.replace('-femmes', '-women').replace('-hommes', '-men'),
+        league_url.replace('-women', '-femmes').replace('-men', '-hommes'),
+        league_url.replace('feminine', 'women').replace('masculin', 'men'),
+    ]
+    # Remove duplicates while preserving order
+    url_alternatives = list(dict.fromkeys(url_alternatives))
+
     rankings: dict[str, int] = {}
 
-    try:
-        await page.goto(standings_url, wait_until='domcontentloaded', timeout=30000)
-        await page.wait_for_timeout(5000)  # Wait for dynamic content
+    for url in url_alternatives:
+        standings_url = f'{url.rstrip("/")}/classement/'
 
-        # Extract standings using the table structure
-        data = await page.evaluate('''() => {
-            const rows = document.querySelectorAll('.ui-table__row');
-            const standings = [];
+        try:
+            response = await page.goto(standings_url, wait_until='domcontentloaded', timeout=20000)
+            await page.wait_for_timeout(3000)
 
-            rows.forEach(row => {
-                const rankEl = row.querySelector('.tableCellRank');
-                const teamEl = row.querySelector('.tableCellParticipant__name');
+            # Check if page loaded successfully (not error page)
+            page_text = await page.inner_text('body')
+            if 'Erreur' in page_text or len(page_text) < 200:
+                continue
 
-                if (rankEl && teamEl) {
-                    const rankText = rankEl.textContent?.trim().replace('.', '');
-                    const rank = parseInt(rankText) || 0;
-                    const team = teamEl.textContent?.trim() || '';
-                    if (rank > 0 && team) {
-                        standings.push({rank, team});
+            # Extract standings using the table structure
+            data = await page.evaluate('''() => {
+                const rows = document.querySelectorAll('.ui-table__row');
+                const standings = [];
+
+                rows.forEach(row => {
+                    const rankEl = row.querySelector('.tableCellRank');
+                    const teamEl = row.querySelector('.tableCellParticipant__name');
+
+                    if (rankEl && teamEl) {
+                        const rankText = rankEl.textContent?.trim().replace('.', '');
+                        const rank = parseInt(rankText) || 0;
+                        const team = teamEl.textContent?.trim() || '';
+                        if (rank > 0 && team) {
+                            standings.push({rank, team});
+                        }
                     }
-                }
-            });
+                });
 
-            return standings;
-        }''')
+                return standings;
+            }''')
 
-        for item in data:
-            # Store with lowercase key for case-insensitive matching
-            rankings[item['team'].lower()] = item['rank']
+            for item in data:
+                # Store with lowercase key for case-insensitive matching
+                rankings[item['team'].lower()] = item['rank']
 
-        if rankings:
-            print(f'  Found {len(rankings)} teams in standings')
+            if rankings:
+                print(f'  Found {len(rankings)} teams in standings')
+                break  # Success, no need to try other URLs
 
-    except Exception as e:
-        print(f'  Could not fetch standings for {standings_url}: {e}')
+        except Exception as e:
+            continue  # Try next URL alternative
 
     return rankings
 
@@ -404,19 +423,26 @@ async def scrape_flashscore(headless: bool = True) -> list[MatchWithStats]:
 
             for match in matches:
                 league_url = match.get('leagueUrl', '')
-                if league_url and league_url not in seen_leagues:
-                    seen_leagues.add(league_url)
-                    full_url = f'{BASE_URL}{league_url}' if not league_url.startswith('http') else league_url
-                    print(f'  Fetching standings for: {match.get("league", league_url)}')
-                    standings = await scrape_league_standings(page, full_url)
-                    if standings:
-                        league_standings[league_url] = standings
+                league_key = league_url or f"{match.get('country', '')}_{match.get('league', '')}"
+
+                if league_key and league_key not in seen_leagues:
+                    seen_leagues.add(league_key)
+
+                    if league_url:
+                        full_url = f'{BASE_URL}{league_url}' if not league_url.startswith('http') else league_url
+                        print(f'  Fetching standings for: {match.get("league", league_url)}')
+                        standings = await scrape_league_standings(page, full_url)
+
+                        if standings:
+                            league_standings[league_key] = standings
+
                     await page.wait_for_timeout(500)
 
             # Step 3: Apply rankings to matches
             for match in matches:
                 league_url = match.get('leagueUrl', '')
-                standings = league_standings.get(league_url, {})
+                league_key = league_url or f"{match.get('country', '')}_{match.get('league', '')}"
+                standings = league_standings.get(league_key, {})
                 match['rankA'] = find_team_rank(match['teamA'], standings)
                 match['rankB'] = find_team_rank(match['teamB'], standings)
 
