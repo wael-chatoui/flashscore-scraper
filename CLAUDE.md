@@ -21,13 +21,20 @@ scriping-sports/
 │   ├── scraper.py        # Playwright scraper (async)
 │   ├── sheets.py         # Google Sheets integration
 │   ├── main.py           # CLI entry point
+│   ├── read_sheet.py     # Utility to inspect Google Sheet
 │   └── test_scraper.py   # Debug test script
+├── scripts/
+│   ├── run_scraper.sh    # Runner script for cron/systemd
+│   ├── install_cron.sh   # Install scheduled tasks
+│   ├── flashscore-scraper.service  # Systemd service
+│   └── flashscore-scraper.timer    # Systemd timer
 ├── requirements.txt      # Python dependencies
 ├── Dockerfile            # Docker image (Python/Playwright)
 ├── docker-compose.yml    # Docker orchestration
 ├── .env.example          # Environment template
 ├── credentials.json      # Google service account (gitignored)
-└── output/               # JSON output directory
+├── output/               # JSON output directory
+└── logs/                 # Log files directory
 ```
 
 ## Commands
@@ -45,8 +52,44 @@ cd src && python main.py --sheets-only --json=file.json  # Only inject
 # Test with visible browser
 cd src && python test_scraper.py
 
+# Inspect Google Sheet structure
+cd src && python read_sheet.py --list
+cd src && python read_sheet.py "TRI BASE O/U 4"
+
 # Docker
 docker compose up --build
+```
+
+## Scheduling (Cron/Systemd)
+
+The scraper can be scheduled to run daily using either cron or systemd:
+
+```bash
+# Install systemd timer (recommended) - runs daily at 8:00 AM
+./scripts/install_cron.sh systemd
+
+# Or install cron job
+./scripts/install_cron.sh cron
+
+# Remove all scheduled tasks
+./scripts/install_cron.sh remove
+
+# Check systemd timer status
+systemctl --user status flashscore-scraper.timer
+
+# View logs
+journalctl --user -u flashscore-scraper.service
+cat logs/scraper_$(date +%Y-%m-%d).log
+
+# Run manually
+./scripts/run_scraper.sh
+```
+
+### Docker Scheduling (Alternative)
+
+```bash
+# Start with ofelia scheduler (runs at 8:00 AM daily)
+docker compose --profile scheduled up -d
 ```
 
 ## Environment Variables

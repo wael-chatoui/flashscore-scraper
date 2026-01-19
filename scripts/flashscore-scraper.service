@@ -1,0 +1,18 @@
+[Unit]
+Description=FlashScore Volleyball Scraper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=%i
+WorkingDirectory=/home/%i/Work/test/scriping-sports
+ExecStart=/home/%i/Work/test/scriping-sports/scripts/run_scraper.sh
+StandardOutput=journal
+StandardError=journal
+
+# Environment file (optional)
+EnvironmentFile=-/home/%i/Work/test/scriping-sports/.env
+
+[Install]
+WantedBy=multi-user.target

@@ -21,8 +21,10 @@ credentials.json
 # Output files
 output/*.json
 !output/.gitkeep
-!package.json
-!package-lock.json
+
+# Log files
+logs/*.log
+!logs/.gitkeep
 
 # IDE
 .idea/
