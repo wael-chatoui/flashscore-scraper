@@ -10,12 +10,12 @@ import sys
 from scraper import scrape_flashscore
 
 
-async def test(headless: bool = True) -> None:
+async def test() -> None:
     """Run scraper test"""
-    print(f'Testing FlashScore scraper (headless={headless})...\n')
+    print('Testing FlashScore scraper...\n')
 
     try:
-        matches = await scrape_flashscore(headless=headless)
+        matches = await scrape_flashscore()
 
         print('\n' + '=' * 60)
         print(f'Found {len(matches)} matches')
@@ -24,7 +24,7 @@ async def test(headless: bool = True) -> None:
         # Print first 5 matches
         for i, m in enumerate(matches[:5]):
             print(f'\nMatch {i + 1}:')
-            print(f"  {m['teamA']} vs {m['teamB']}")
+            print(f"  {m['teamA']} (Rank: {m['rankA'] or 'N/A'}) vs {m['teamB']} (Rank: {m['rankB'] or 'N/A'})")
             print(f"  {m['country']} - {m['league']}")
             print(f"  {m['date']} {m['time']}")
             print(f"  Team A stats: 3sets={m['teamAStats']['count3']}, 4sets={m['teamAStats']['count4']}, 5sets={m['teamAStats']['count5']}")
@@ -42,6 +42,4 @@ async def test(headless: bool = True) -> None:
 
 
 if __name__ == '__main__':
-    # Use --visible flag to show browser
-    headless = '--visible' not in sys.argv
-    asyncio.run(test(headless=headless))
+    asyncio.run(test())

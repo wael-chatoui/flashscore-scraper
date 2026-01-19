@@ -26,9 +26,6 @@ class GoogleConfig:
 @dataclass
 class ScraperConfig:
     """Scraper configuration"""
-    # Run browser in headless mode (set to false for debugging)
-    headless: bool = field(default_factory=lambda: os.getenv('HEADLESS', 'true').lower() != 'false')
-
     # Delay between match requests (ms)
     request_delay: int = field(default_factory=lambda: int(os.getenv('REQUEST_DELAY', '1000')))
 

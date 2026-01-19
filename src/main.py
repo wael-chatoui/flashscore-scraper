@@ -78,7 +78,7 @@ async def main() -> None:
     if not sheets_only:
         print('\n[1/2] Scraping FlashScore volleyball matches...\n')
 
-        match_data = await scrape_flashscore(config.scraper.headless)
+        match_data = await scrape_flashscore()
 
         print(f'\nScraped {len(match_data)} matches')
 

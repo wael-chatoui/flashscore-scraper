@@ -396,14 +396,14 @@ async def scrape_h2h_stats(page: Page, h2h_url: str) -> MatchStats:
         }
 
 
-async def scrape_flashscore(headless: bool = True) -> list[MatchWithStats]:
+async def scrape_flashscore() -> list[MatchWithStats]:
     """
     Main scraping function
     """
     print('Starting FlashScore volleyball scraper...')
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=headless)
+        browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
             locale='fr-FR',
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -481,5 +481,5 @@ async def scrape_flashscore(headless: bool = True) -> list[MatchWithStats]:
 
 if __name__ == '__main__':
     # Allow running scraper directly for testing
-    results = asyncio.run(scrape_flashscore(headless=False))
+    results = asyncio.run(scrape_flashscore())
     print(f'\nScraped {len(results)} matches')
