@@ -16,7 +16,8 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 class GoogleConfig:
     """Google Sheets configuration"""
     # Your Google Sheet ID (from the URL: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit)
-    spreadsheet_id: str = field(default_factory=lambda: os.getenv('SPREADSHEET_ID', ''))
+    # Use SPREADSHEET_ID_2 for original spreadsheet, SPREADSHEET_ID for test/modified version
+    spreadsheet_id: str = field(default_factory=lambda: os.getenv('SPREADSHEET_ID_2') or os.getenv('SPREADSHEET_ID', ''))
 
     # Path to Google service account credentials JSON file
     # Download from Google Cloud Console > APIs & Services > Credentials
@@ -36,8 +37,8 @@ class ScraperConfig:
 @dataclass
 class SheetsConfig:
     """Google Sheets tab and row configuration"""
-    # Column preset: 'TRI BASE OU 4' (from brief) or 'CALCUL SET' (from CSV)
-    preset: str = field(default_factory=lambda: os.getenv('SHEET_PRESET', 'TRI BASE OU 4'))
+    # Column preset: 'ORIGINAL' (client's original), 'TRI BASE OU 4' (test), or 'CALCUL SET' (from CSV)
+    preset: str = field(default_factory=lambda: os.getenv('SHEET_PRESET', 'ORIGINAL'))
 
     # Sheet tab name (overrides preset default)
     tab_name: str = field(default_factory=lambda: os.getenv('SHEET_TAB_NAME', ''))

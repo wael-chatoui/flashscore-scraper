@@ -35,7 +35,20 @@ from config import config
 # - H2H stats: O, P, Q
 
 COLUMN_PRESETS = {
-    # Corrected mapping based on actual sheet structure
+    # ORIGINAL spreadsheet structure (Spreadsheet 2 - client's original file)
+    # GREEN columns only: A-H (match info), M-O (Team A), X-Z (Team B), AJ-AL (H2H)
+    # All other columns contain formulas - DO NOT TOUCH
+    'ORIGINAL': {
+        'sheetName': 'TRI BASE O/U 4',
+        'matchInfo': {
+            'date': 'A', 'time': 'B', 'country': 'C', 'league': 'D',
+            'teamA': 'E', 'rankA': 'F', 'teamB': 'G', 'rankB': 'H'
+        },
+        'teamA': {'set3': 'M', 'set4': 'N', 'set5': 'O'},
+        'teamB': {'set3': 'X', 'set4': 'Y', 'set5': 'Z'},
+        'h2h': {'set3': 'AJ', 'set4': 'AK', 'set5': 'AL'}
+    },
+    # Modified spreadsheet structure (Spreadsheet 1 - test/modified version)
     # Sheet columns: A=DATE, I=Status, J=PAYS, K=LEAGUE, L=EQUIPE A, M=Rank A, N=EQUIPE B, O=Rank B
     # Stats: T-V=Team A (3,4,5 sets), AE-AG=Team B (3,4,5 sets), AJ-AL=H2H (3,4,5 sets)
     'TRI BASE OU 4': {
@@ -61,8 +74,8 @@ COLUMN_PRESETS = {
 
 def get_column_preset() -> dict:
     """Get active preset from config or default"""
-    preset_name = config.sheets.preset or 'TRI BASE OU 4'
-    return COLUMN_PRESETS.get(preset_name, COLUMN_PRESETS['TRI BASE OU 4'])
+    preset_name = config.sheets.preset or 'ORIGINAL'
+    return COLUMN_PRESETS.get(preset_name, COLUMN_PRESETS['ORIGINAL'])
 
 
 def get_google_sheets_client():
@@ -112,34 +125,56 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
     value_ranges = []
     end_row = start_row + len(match_data) - 1
 
-    # Match info - handle both contiguous and non-contiguous columns
+    # Match info - handle contiguous columns (A-H for ORIGINAL, or A + I-O for modified)
     if preset.get('matchInfo'):
         match_info = preset['matchInfo']
 
-        # Date column (A) - separate because B-H have formulas
-        date_values = [[m.get('date', '')] for m in match_data]
-        value_ranges.append({
-            'range': f"'{sheet_name}'!{match_info['date']}{start_row}:{match_info['date']}{end_row}",
-            'values': date_values
-        })
-
-        # Time through RankB columns (I-O) - contiguous block
-        match_info_values = [
-            [
-                m.get('time', ''),
-                m.get('country', ''),
-                m.get('league', ''),
-                m.get('teamA', ''),
-                m.get('rankA', ''),
-                m.get('teamB', ''),
-                m.get('rankB', '')
+        # Check if match info columns are contiguous (ORIGINAL preset: A-H)
+        # For ORIGINAL: date=A, time=B, country=C, league=D, teamA=E, rankA=F, teamB=G, rankB=H
+        if match_info['time'] == 'B':
+            # ORIGINAL preset - all match info is contiguous A-H
+            match_info_values = [
+                [
+                    m.get('date', ''),
+                    m.get('time', ''),
+                    m.get('country', ''),
+                    m.get('league', ''),
+                    m.get('teamA', ''),
+                    m.get('rankA', ''),
+                    m.get('teamB', ''),
+                    m.get('rankB', '')
+                ]
+                for m in match_data
             ]
-            for m in match_data
-        ]
-        value_ranges.append({
-            'range': f"'{sheet_name}'!{match_info['time']}{start_row}:{match_info['rankB']}{end_row}",
-            'values': match_info_values
-        })
+            value_ranges.append({
+                'range': f"'{sheet_name}'!{match_info['date']}{start_row}:{match_info['rankB']}{end_row}",
+                'values': match_info_values
+            })
+        else:
+            # Modified preset - Date column (A) separate, then I-O
+            date_values = [[m.get('date', '')] for m in match_data]
+            value_ranges.append({
+                'range': f"'{sheet_name}'!{match_info['date']}{start_row}:{match_info['date']}{end_row}",
+                'values': date_values
+            })
+
+            # Time through RankB columns (I-O) - contiguous block
+            match_info_values = [
+                [
+                    m.get('time', ''),
+                    m.get('country', ''),
+                    m.get('league', ''),
+                    m.get('teamA', ''),
+                    m.get('rankA', ''),
+                    m.get('teamB', ''),
+                    m.get('rankB', '')
+                ]
+                for m in match_data
+            ]
+            value_ranges.append({
+                'range': f"'{sheet_name}'!{match_info['time']}{start_row}:{match_info['rankB']}{end_row}",
+                'values': match_info_values
+            })
 
     # Team A stats (0 = no data available, keeps formulas working)
     team_a_values = [

@@ -18,8 +18,8 @@ case "$1" in
     cron)
         echo "Installing cron job..."
 
-        # Create cron entry (runs at 8:00 AM daily)
-        CRON_CMD="0 8 * * * $SCRIPT_DIR/run_scraper.sh >> $PROJECT_DIR/logs/cron.log 2>&1"
+        # Create cron entry (runs at 1:00 AM daily to scrape tomorrow's matches)
+        CRON_CMD="0 1 * * * $SCRIPT_DIR/run_scraper.sh >> $PROJECT_DIR/logs/cron.log 2>&1"
 
         # Check if already installed
         if crontab -l 2>/dev/null | grep -q "run_scraper.sh"; then
@@ -31,7 +31,7 @@ case "$1" in
         (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
 
         echo "Cron job installed:"
-        echo "  Schedule: Daily at 8:00 AM"
+        echo "  Schedule: Daily at 1:00 AM (scrapes tomorrow's matches)"
         echo "  Command: $SCRIPT_DIR/run_scraper.sh"
         echo ""
         echo "View with: crontab -l"
@@ -56,7 +56,7 @@ case "$1" in
         systemctl --user start flashscore-scraper.timer
 
         echo "Systemd timer installed and started:"
-        echo "  Schedule: Daily at 8:00 AM"
+        echo "  Schedule: Daily at 1:00 AM (scrapes tomorrow's matches)"
         echo ""
         echo "Commands:"
         echo "  Status:  systemctl --user status flashscore-scraper.timer"
@@ -91,9 +91,12 @@ case "$1" in
         echo "Usage: $0 {cron|systemd|remove}"
         echo ""
         echo "Options:"
-        echo "  cron     - Install crontab entry (runs at 8:00 AM daily)"
-        echo "  systemd  - Install systemd timer (recommended, runs at 8:00 AM daily)"
+        echo "  cron     - Install crontab entry (runs at 1:00 AM daily)"
+        echo "  systemd  - Install systemd timer (recommended, runs at 1:00 AM daily)"
         echo "  remove   - Remove all scheduled tasks"
+        echo ""
+        echo "The scraper runs at 1:00 AM and fetches tomorrow's matches (J+1)."
+        echo "This way, the Google Sheet is ready with match data when the client wakes up."
         exit 1
         ;;
 esac

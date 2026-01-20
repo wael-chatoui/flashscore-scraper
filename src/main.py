@@ -3,7 +3,8 @@
 FlashScore Volleyball Scraper - Main Entry Point
 
 Usage:
-    python main.py                     # Full mode: scrape + sheets
+    python main.py                     # Full mode: scrape tomorrow's matches (J+1) + sheets
+    python main.py --today             # Scrape today's matches instead of tomorrow
     python main.py --scrape-only       # Only scrape, save to JSON
     python main.py --sheets-only --json=file.json  # Only inject to sheets from JSON
 """
@@ -12,7 +13,7 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from config import config
@@ -56,6 +57,11 @@ async def main() -> None:
     args = sys.argv[1:]
     scrape_only = '--scrape-only' in args
     sheets_only = '--sheets-only' in args
+    scrape_today = '--today' in args
+
+    # Determine days offset: 0 for today, 1 for tomorrow (default)
+    days_offset = 0 if scrape_today else 1
+    target_date = datetime.now() + timedelta(days=days_offset)
 
     # Parse --json=file.json argument
     json_file = None
@@ -67,7 +73,8 @@ async def main() -> None:
     print('=' * 50)
     print('FlashScore Volleyball Scraper')
     print('=' * 50)
-    print(f"Date: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f"Run time: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f"Target date: {target_date.strftime('%d/%m/%Y')} ({'today' if days_offset == 0 else 'tomorrow (J+1)'})")
     mode = 'Scrape only' if scrape_only else 'Sheets only' if sheets_only else 'Full (scrape + sheets)'
     print(f'Mode: {mode}')
     print('=' * 50)
@@ -76,15 +83,16 @@ async def main() -> None:
 
     # Step 1: Scrape data (unless sheets-only mode)
     if not sheets_only:
-        print('\n[1/2] Scraping FlashScore volleyball matches...\n')
+        print(f"\n[1/2] Scraping FlashScore volleyball matches for {target_date.strftime('%d/%m/%Y')}...\n")
 
-        match_data = await scrape_flashscore()
+        match_data = await scrape_flashscore(days_offset=days_offset)
 
         print(f'\nScraped {len(match_data)} matches')
 
         # Save to JSON file (in output dir if exists, otherwise current dir)
+        # Use target date in filename (the date of the matches, not today)
         output_dir = './output' if os.path.exists('./output') else '.'
-        output_file = os.path.join(output_dir, f"matches_{datetime.now().strftime('%Y-%m-%d')}.json")
+        output_file = os.path.join(output_dir, f"matches_{target_date.strftime('%Y-%m-%d')}.json")
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(match_data, f, indent=2, ensure_ascii=False)
         print(f'Data saved to {output_file}')

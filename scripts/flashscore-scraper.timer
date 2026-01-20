@@ -1,8 +1,8 @@
 [Unit]
-Description=Run FlashScore Volleyball Scraper daily at 8:00 AM
+Description=Run FlashScore Volleyball Scraper daily at 1:00 AM (scrapes tomorrow's matches)
 
 [Timer]
-OnCalendar=*-*-* 08:00:00
+OnCalendar=*-*-* 01:00:00
 Persistent=true
 RandomizedDelaySec=300
 

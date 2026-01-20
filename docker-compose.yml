@@ -6,7 +6,9 @@ services:
     container_name: flashscore-volleyball-scraper
     environment:
       # Google Sheets configuration
+      # SPREADSHEET_ID_2 is the original spreadsheet, SPREADSHEET_ID is the test version
       - SPREADSHEET_ID=${SPREADSHEET_ID}
+      - SPREADSHEET_ID_2=${SPREADSHEET_ID_2}
       - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON}
       - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
 
@@ -16,8 +18,8 @@ services:
       - MAX_MATCHES=0
 
       # Sheet configuration
-      # Use 'TRI BASE OU 4' (from brief) or 'CALCUL SET' (from CSV)
-      - SHEET_PRESET=${SHEET_PRESET:-TRI BASE OU 4}
+      # Use 'ORIGINAL' for client's original spreadsheet, 'TRI BASE OU 4' for test version
+      - SHEET_PRESET=${SHEET_PRESET:-ORIGINAL}
       - SHEET_TAB_NAME=${SHEET_TAB_NAME:-}
       - START_ROW=${START_ROW:-2}
 
@@ -47,7 +49,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     labels:
-      ofelia.job-run.scraper.schedule: "0 8 * * *"  # Run at 8:00 AM daily
+      ofelia.job-run.scraper.schedule: "0 1 * * *"  # Run at 1:00 AM daily (scrapes tomorrow's matches)
       ofelia.job-run.scraper.container: "flashscore-volleyball-scraper"
     profiles:
       - scheduled  # Only start with: docker compose --profile scheduled up

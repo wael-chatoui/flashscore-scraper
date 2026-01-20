@@ -5,7 +5,7 @@ Scrapes volleyball matches and H2H statistics from FlashScore
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TypedDict
 from playwright.async_api import async_playwright, Page, ElementHandle
 
@@ -223,12 +223,35 @@ async def click_show_more_buttons(page: Page) -> None:
                 pass
 
 
-async def extract_today_matches(page: Page) -> list[Match]:
+async def extract_matches_for_date(page: Page, days_offset: int = 1) -> list[Match]:
     """
-    Extract match info from the main volleyball page
+    Extract match info from the volleyball page for a specific date.
+
+    Args:
+        page: Playwright page object
+        days_offset: Number of days from today (0=today, 1=tomorrow, etc.)
+                     Default is 1 (tomorrow / J+1)
     """
     await page.goto(VOLLEYBALL_URL, wait_until='domcontentloaded', timeout=30000)
     await page.wait_for_timeout(3000)
+
+    # Navigate to the target date by clicking the date navigation arrows
+    if days_offset > 0:
+        print(f'Navigating to J+{days_offset} (tomorrow)...')
+        for _ in range(days_offset):
+            # Click the "next day" arrow button
+            next_button = await page.query_selector('button.calendar__navigation--tomorrow, button[data-testid="calendar-next"], [class*="calendar__navigation--next"], .calendar__nav--next')
+            if next_button:
+                await next_button.click()
+                await page.wait_for_timeout(2000)
+            else:
+                # Try clicking by aria-label or other selectors
+                next_button = await page.query_selector('[aria-label*="suivant"], [aria-label*="next"], button.arrow--next, .calendar__direction--next')
+                if next_button:
+                    await next_button.click()
+                    await page.wait_for_timeout(2000)
+                else:
+                    print('Warning: Could not find next day navigation button')
 
     matches: list[Match] = []
 
@@ -309,6 +332,10 @@ async def extract_today_matches(page: Page) -> list[Match]:
         return results;
     }''')
 
+    # Calculate target date (French format)
+    target_date = datetime.now() + timedelta(days=days_offset)
+    date_str = target_date.strftime('%d/%m/%Y')
+
     # Process extracted data
     for data in extracted_data:
         # Build H2H URL
@@ -319,10 +346,6 @@ async def extract_today_matches(page: Page) -> list[Match]:
                 base_href = f'{BASE_URL}{base_href}'
             base_href = base_href.split('?')[0].rstrip('/')
             match_url = f'{base_href}/tete-a-tete/global/'
-
-        # Today's date (French format)
-        today = datetime.now()
-        date_str = today.strftime('%d/%m/%Y')
 
         matches.append({
             'date': date_str,
@@ -337,8 +360,14 @@ async def extract_today_matches(page: Page) -> list[Match]:
             'matchUrl': match_url
         })
 
-    print(f'Found {len(matches)} matches')
+    print(f'Found {len(matches)} matches for {date_str}')
     return matches
+
+
+# Keep old function name as alias for backward compatibility
+async def extract_today_matches(page: Page) -> list[Match]:
+    """Extract today's matches (legacy function, use extract_matches_for_date instead)"""
+    return await extract_matches_for_date(page, days_offset=0)
 
 
 async def scrape_h2h_stats(page: Page, h2h_url: str) -> MatchStats:
@@ -404,11 +433,18 @@ async def scrape_h2h_stats(page: Page, h2h_url: str) -> MatchStats:
         }
 
 
-async def scrape_flashscore() -> list[MatchWithStats]:
+async def scrape_flashscore(days_offset: int = 1) -> list[MatchWithStats]:
     """
-    Main scraping function
+    Main scraping function.
+
+    Args:
+        days_offset: Number of days from today to scrape.
+                     Default is 1 (tomorrow / J+1) for the scheduled cron job.
+                     Use 0 for today's matches.
     """
     print('Starting FlashScore volleyball scraper...')
+    target_date = datetime.now() + timedelta(days=days_offset)
+    print(f'Target date: {target_date.strftime("%d/%m/%Y")} (J+{days_offset})')
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -419,9 +455,9 @@ async def scrape_flashscore() -> list[MatchWithStats]:
         page = await context.new_page()
 
         try:
-            # Step 1: Get today's matches
-            print("Fetching today's matches...")
-            matches = await extract_today_matches(page)
+            # Step 1: Get matches for target date (default: tomorrow)
+            print(f"Fetching matches for {target_date.strftime('%d/%m/%Y')}...")
+            matches = await extract_matches_for_date(page, days_offset)
             print(f'Found {len(matches)} matches')
 
             # Step 2: Fetch standings for each unique league to get rankings
