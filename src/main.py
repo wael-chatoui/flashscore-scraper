@@ -4,7 +4,9 @@ FlashScore Volleyball Scraper - Main Entry Point
 
 Usage:
     python main.py                     # Full mode: scrape tomorrow's matches (J+1) + sheets
-    python main.py --today             # Scrape today's matches instead of tomorrow
+    python main.py --today             # Scrape today's matches (J+0)
+    python main.py --days=-2           # Scrape matches from 2 days ago (J-2)
+    python main.py --days=2            # Scrape matches 2 days from now (J+2)
     python main.py --scrape-only       # Only scrape, save to JSON
     python main.py --sheets-only --json=file.json  # Only inject to sheets from JSON
 """
@@ -59,8 +61,21 @@ async def main() -> None:
     sheets_only = '--sheets-only' in args
     scrape_today = '--today' in args
 
-    # Determine days offset: 0 for today, 1 for tomorrow (default)
-    days_offset = 0 if scrape_today else 1
+    # Parse --days=N argument for custom offset
+    days_offset = 1  # Default: tomorrow (J+1)
+    for arg in args:
+        if arg.startswith('--days='):
+            try:
+                days_offset = int(arg.split('=', 1)[1])
+            except ValueError:
+                print(f'Invalid --days value: {arg}')
+                sys.exit(1)
+            break
+
+    # --today is shorthand for --days=0
+    if scrape_today:
+        days_offset = 0
+
     target_date = datetime.now() + timedelta(days=days_offset)
 
     # Parse --json=file.json argument
@@ -74,7 +89,8 @@ async def main() -> None:
     print('FlashScore Volleyball Scraper')
     print('=' * 50)
     print(f"Run time: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    print(f"Target date: {target_date.strftime('%d/%m/%Y')} ({'today' if days_offset == 0 else 'tomorrow (J+1)'})")
+    offset_label = 'today' if days_offset == 0 else f'J{days_offset:+d}'
+    print(f"Target date: {target_date.strftime('%d/%m/%Y')} ({offset_label})")
     mode = 'Scrape only' if scrape_only else 'Sheets only' if sheets_only else 'Full (scrape + sheets)'
     print(f'Mode: {mode}')
     print('=' * 50)
