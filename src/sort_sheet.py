@@ -57,7 +57,7 @@ def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None
 
     # Use ORIGINAL preset for SPREADSHEET_ID_2
     preset = COLUMN_PRESETS['ORIGINAL']
-    target_sheet = sheet_name or preset['sheetName']
+    target_sheet = sheet_name or 'TRI BASE O/U 4'
 
     sheet_id = get_sheet_id(sheets, spreadsheet_id, target_sheet)
 
