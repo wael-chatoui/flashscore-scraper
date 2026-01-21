@@ -44,11 +44,11 @@ def col_to_index(col_letter: str) -> int:
 
 
 def parse_date(date_str: str):
-    """Parse date string in various formats to (year, month, day) tuple for sorting."""
+    """Parse date string in various formats to datetime object."""
     from datetime import datetime
 
     if not date_str:
-        return (0, 0, 0)
+        return None
 
     # Clean up the string (remove trailing quotes/apostrophes)
     date_str = date_str.strip().rstrip("'\"")
@@ -61,12 +61,18 @@ def parse_date(date_str: str):
 
     for fmt in formats:
         try:
-            dt = datetime.strptime(date_str, fmt)
-            return (dt.year, dt.month, dt.day)
+            return datetime.strptime(date_str, fmt)
         except ValueError:
             continue
 
-    return (0, 0, 0)
+    return None
+
+
+def format_date(dt) -> str:
+    """Format datetime to DD/MM/YYYY."""
+    if dt is None:
+        return ''
+    return dt.strftime('%d/%m/%Y')
 
 
 def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None:
@@ -112,10 +118,19 @@ def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None
     # Sort data rows by parsed date
     def sort_key(row):
         if len(row) > date_col_index:
-            return parse_date(row[date_col_index])
+            dt = parse_date(row[date_col_index])
+            if dt:
+                return (dt.year, dt.month, dt.day)
         return (0, 0, 0)
 
     sorted_rows = sorted(data_rows, key=sort_key, reverse=descending)
+
+    # Standardize date format to DD/MM/YYYY
+    for row in sorted_rows:
+        if len(row) > date_col_index and row[date_col_index]:
+            dt = parse_date(row[date_col_index])
+            if dt:
+                row[date_col_index] = format_date(dt)
 
     # Combine header with sorted data
     all_rows = [header] + sorted_rows
