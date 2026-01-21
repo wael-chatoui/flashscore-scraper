@@ -43,10 +43,36 @@ def col_to_index(col_letter: str) -> int:
     return result - 1
 
 
+def parse_date(date_str: str):
+    """Parse date string in various formats to (year, month, day) tuple for sorting."""
+    from datetime import datetime
+
+    if not date_str:
+        return (0, 0, 0)
+
+    # Clean up the string (remove trailing quotes/apostrophes)
+    date_str = date_str.strip().rstrip("'\"")
+
+    # Try various formats
+    formats = [
+        '%d/%m/%Y',   # 21/01/2026
+        '%d/%m/%y',   # 21/01/26 or 22/1/26
+    ]
+
+    for fmt in formats:
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            return (dt.year, dt.month, dt.day)
+        except ValueError:
+            continue
+
+    return (0, 0, 0)
+
+
 def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None:
     """
-    Sort Google Sheet by date column using native Sheets API sort.
-    Preserves formulas and only reorders rows.
+    Sort Google Sheet by date column.
+    Reads all data, sorts by parsed date values, and rewrites.
 
     Args:
         descending: Sort newest first if True
@@ -59,54 +85,47 @@ def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None
     preset = COLUMN_PRESETS['ORIGINAL']
     target_sheet = sheet_name or 'TRI BASE O/U 4'
 
-    sheet_id = get_sheet_id(sheets, spreadsheet_id, target_sheet)
-
     # Get date column index from preset (column A)
     date_col = preset['matchInfo']['date']
     date_col_index = col_to_index(date_col)
 
-    # Get sheet dimensions
-    sheet_metadata = sheets.spreadsheets().get(
-        spreadsheetId=spreadsheet_id,
-        ranges=[f"'{target_sheet}'"],
-        includeGridData=False
-    ).execute()
-
-    sheet_props = sheet_metadata['sheets'][0]['properties']['gridProperties']
-    row_count = sheet_props.get('rowCount', 1000)
-    col_count = sheet_props.get('columnCount', 50)
-
-    # Start from row 2 (skip header), 0-indexed
-    start_row = 1
-
     print(f"Sorting '{target_sheet}' by column {date_col} ({'descending' if descending else 'ascending'})...")
     print(f"  Spreadsheet: SPREADSHEET_ID_2")
-    print(f"  Sheet ID: {sheet_id}")
-    print(f"  Date column: {date_col} (index {date_col_index})")
-    print(f"  Rows: {start_row + 1} to {row_count}")
 
-    # Sort request
-    sort_request = {
-        'requests': [{
-            'sortRange': {
-                'range': {
-                    'sheetId': sheet_id,
-                    'startRowIndex': start_row,
-                    'endRowIndex': row_count,
-                    'startColumnIndex': 0,
-                    'endColumnIndex': col_count
-                },
-                'sortSpecs': [{
-                    'dimensionIndex': date_col_index,
-                    'sortOrder': 'DESCENDING' if descending else 'ASCENDING'
-                }]
-            }
-        }]
-    }
-
-    sheets.spreadsheets().batchUpdate(
+    # Read all data
+    result = sheets.spreadsheets().values().get(
         spreadsheetId=spreadsheet_id,
-        body=sort_request
+        range=f"'{target_sheet}'"
+    ).execute()
+
+    values = result.get('values', [])
+    if len(values) < 2:
+        print("No data to sort")
+        return
+
+    # Separate header and data rows
+    header = values[0]
+    data_rows = values[1:]
+
+    print(f"  Rows to sort: {len(data_rows)}")
+
+    # Sort data rows by parsed date
+    def sort_key(row):
+        if len(row) > date_col_index:
+            return parse_date(row[date_col_index])
+        return (0, 0, 0)
+
+    sorted_rows = sorted(data_rows, key=sort_key, reverse=descending)
+
+    # Combine header with sorted data
+    all_rows = [header] + sorted_rows
+
+    # Write back to sheet
+    sheets.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id,
+        range=f"'{target_sheet}'!A1",
+        valueInputOption='RAW',
+        body={'values': all_rows}
     ).execute()
 
     print("Done! Sheet sorted by date.")
