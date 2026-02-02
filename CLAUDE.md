@@ -131,14 +131,19 @@ class Config:
     sheets: SheetsConfig
 ```
 
-## Important CSS Selectors (FlashScore)
+## CSS Selectors (FlashScore)
 
-- `.event__match` - Match row
-- `.event__participant--home` / `--away` - Team names
-- `.h2h__section` - H2H section container
-- `.h2h__row` - Individual H2H match
-- `.h2h__result` - Score (e.g., "3-1")
-- `button.wclButtonLink--h2h` - "Show more" button
+All CSS selectors are centralized in the `SELECTORS` dict at the top of `src/scraper.py`.
+
+When FlashScore changes their HTML, update the `SELECTORS` dict only — every Python call and JS `page.evaluate()` reads from it.
+
+The dict is organized by page context:
+- `matches` — main volleyball page (match rows, league headers, team names)
+- `navigation` — date navigation buttons
+- `standings` — league standings table
+- `h2h` — head-to-head page (sections, rows, results, show-more button)
+
+A `validate_selectors()` function runs at startup and warns if critical selectors match 0 elements.
 
 ---
 

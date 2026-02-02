@@ -14,6 +14,44 @@ from config import config
 BASE_URL = 'https://www.flashscore.fr'
 VOLLEYBALL_URL = f'{BASE_URL}/volleyball/'
 
+# ── Centralized CSS selectors ──────────────────────────────────────────
+# When FlashScore changes their HTML, update selectors here only.
+# Values that contain commas are native CSS fallback chains (first match wins).
+# Keys prefixed with _class_ are used in JS className.includes() checks.
+SELECTORS: dict[str, dict[str, str]] = {
+    'matches': {
+        'container':        '.leagues--live, .event, [class*="sportName"]',
+        'all_items':        '.event__match, [class*="headerLeague"], [class*="divider"]',
+        'title_text':       '.headerLeague__title-text, [class*="title-text"], [class*="titleText"]',
+        'category_text':    '.headerLeague__category-text, [class*="category-text"]',
+        'league_link':      'a.headerLeague__title, a[href*="/volleyball/"]',
+        'home_team':        '.event__participant--home',
+        'away_team':        '.event__participant--away',
+        'match_time':       '.event__stage, .event__time, [class*="stage"]',
+        'match_link':       'a[href*="/match/"]',
+        # className.includes() patterns used inside JS
+        '_class_header':    'headerLeague',
+        '_class_divider':   'divider',
+        '_class_match':     'event__match',
+    },
+    'navigation': {
+        'next_day':         'button.calendar__navigation--tomorrow, button[data-testid="calendar-next"], [class*="calendar__navigation--next"], .calendar__nav--next',
+        'next_day_alt':     '[aria-label*="suivant"], [aria-label*="next"], button.arrow--next, .calendar__direction--next',
+    },
+    'standings': {
+        'table_row':        '.ui-table__row',
+        'cell_rank':        '.tableCellRank',
+        'cell_team':        '.tableCellParticipant__name',
+    },
+    'h2h': {
+        'section':          '.h2h__section',
+        'section_title':    '.h2h__title, .section__title',
+        'row':              '.h2h__row',
+        'result':           '.h2h__result',
+        'show_more_btn':    'button.wclButtonLink--h2h',
+    },
+}
+
 
 class SetStats(TypedDict):
     count3: int
@@ -47,12 +85,12 @@ async def count_sets_in_section(section: ElementHandle) -> SetStats:
     """
     Count sets distribution from a H2H section
     """
-    rows = await section.query_selector_all('.h2h__row')
+    rows = await section.query_selector_all(SELECTORS['h2h']['row'])
     count3, count4, count5 = 0, 0, 0
 
     for row in rows:
         try:
-            result_el = await row.query_selector('.h2h__result')
+            result_el = await row.query_selector(SELECTORS['h2h']['result'])
             if not result_el:
                 continue
 
@@ -130,13 +168,13 @@ async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]
             await page.wait_for_timeout(5000)  # Extra wait for table to render
 
             # Extract standings using the table structure
-            data = await page.evaluate('''() => {
-                const rows = document.querySelectorAll('.ui-table__row');
+            data = await page.evaluate('''(sel) => {
+                const rows = document.querySelectorAll(sel.table_row);
                 const standings = [];
 
                 rows.forEach(row => {
-                    const rankEl = row.querySelector('.tableCellRank');
-                    const teamEl = row.querySelector('.tableCellParticipant__name');
+                    const rankEl = row.querySelector(sel.cell_rank);
+                    const teamEl = row.querySelector(sel.cell_team);
 
                     if (rankEl && teamEl) {
                         const rankText = rankEl.textContent?.trim().replace('.', '');
@@ -149,7 +187,7 @@ async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]
                 });
 
                 return standings;
-            }''')
+            }''', SELECTORS['standings'])
 
             for item in data:
                 # Store with both original lowercase and normalized keys for better matching
@@ -210,7 +248,7 @@ async def click_show_more_buttons(page: Page) -> None:
     clicked = True
     while clicked:
         clicked = False
-        buttons = await page.query_selector_all('button.wclButtonLink--h2h')
+        buttons = await page.query_selector_all(SELECTORS['h2h']['show_more_btn'])
         for btn in buttons:
             try:
                 is_visible = await btn.is_visible()
@@ -240,13 +278,13 @@ async def extract_matches_for_date(page: Page, days_offset: int = 1) -> list[Mat
         print(f'Navigating to J+{days_offset} (tomorrow)...')
         for _ in range(days_offset):
             # Click the "next day" arrow button
-            next_button = await page.query_selector('button.calendar__navigation--tomorrow, button[data-testid="calendar-next"], [class*="calendar__navigation--next"], .calendar__nav--next')
+            next_button = await page.query_selector(SELECTORS['navigation']['next_day'])
             if next_button:
                 await next_button.click()
                 await page.wait_for_timeout(2000)
             else:
                 # Try clicking by aria-label or other selectors
-                next_button = await page.query_selector('[aria-label*="suivant"], [aria-label*="next"], button.arrow--next, .calendar__direction--next')
+                next_button = await page.query_selector(SELECTORS['navigation']['next_day_alt'])
                 if next_button:
                     await next_button.click()
                     await page.wait_for_timeout(2000)
@@ -256,24 +294,24 @@ async def extract_matches_for_date(page: Page, days_offset: int = 1) -> list[Mat
     matches: list[Match] = []
 
     # Use page.evaluate to extract all data at once for better performance and accuracy
-    extracted_data = await page.evaluate('''() => {
+    extracted_data = await page.evaluate('''(sel) => {
         const results = [];
         let currentCountry = '';
         let currentLeague = '';
         let currentLeagueUrl = '';
 
         // Get all elements in the event container
-        const container = document.querySelector('.leagues--live, .event, [class*="sportName"]')?.parentElement || document.body;
-        const allElements = container.querySelectorAll('.event__match, [class*="headerLeague"], [class*="divider"]');
+        const container = document.querySelector(sel.container)?.parentElement || document.body;
+        const allElements = container.querySelectorAll(sel.all_items);
 
         allElements.forEach(el => {
             // Check if it's a league header
-            if (el.className.includes('headerLeague') || el.className.includes('divider')) {
-                const titleEl = el.querySelector('.headerLeague__title-text, [class*="title-text"], [class*="titleText"]');
+            if (el.className.includes(sel._class_header) || el.className.includes(sel._class_divider)) {
+                const titleEl = el.querySelector(sel.title_text);
                 if (titleEl) {
                     const fullTitle = titleEl.textContent?.trim() || '';
                     // Extract country from category text
-                    const categoryEl = el.querySelector('.headerLeague__category-text, [class*="category-text"]');
+                    const categoryEl = el.querySelector(sel.category_text);
                     const categoryText = categoryEl?.textContent?.trim() || '';
 
                     if (categoryText) {
@@ -291,7 +329,7 @@ async def extract_matches_for_date(page: Page, days_offset: int = 1) -> list[Mat
                     }
 
                     // Extract league URL from the header link
-                    const leagueLink = el.querySelector('a.headerLeague__title, a[href*="/volleyball/"]');
+                    const leagueLink = el.querySelector(sel.league_link);
                     if (leagueLink) {
                         const href = leagueLink.getAttribute('href') || '';
                         // Only use league URLs (not match URLs)
@@ -304,11 +342,11 @@ async def extract_matches_for_date(page: Page, days_offset: int = 1) -> list[Mat
             }
 
             // It's a match
-            if (el.className.includes('event__match')) {
-                const homeEl = el.querySelector('.event__participant--home');
-                const awayEl = el.querySelector('.event__participant--away');
-                const timeEl = el.querySelector('.event__stage, .event__time, [class*="stage"]');
-                const linkEl = el.querySelector('a[href*="/match/"]');
+            if (el.className.includes(sel._class_match)) {
+                const homeEl = el.querySelector(sel.home_team);
+                const awayEl = el.querySelector(sel.away_team);
+                const timeEl = el.querySelector(sel.match_time);
+                const linkEl = el.querySelector(sel.match_link);
 
                 const teamA = homeEl?.textContent?.trim() || '';
                 const teamB = awayEl?.textContent?.trim() || '';
@@ -330,7 +368,7 @@ async def extract_matches_for_date(page: Page, days_offset: int = 1) -> list[Mat
         });
 
         return results;
-    }''')
+    }''', SELECTORS['matches'])
 
     # Calculate target date (French format)
     target_date = datetime.now() + timedelta(days=days_offset)
@@ -385,7 +423,7 @@ async def scrape_h2h_stats(page: Page, h2h_url: str) -> MatchStats:
         await page.wait_for_timeout(500)
 
         # Get all H2H sections
-        sections = await page.query_selector_all('.h2h__section')
+        sections = await page.query_selector_all(SELECTORS['h2h']['section'])
 
         team_a_stats = default_stats.copy()
         team_b_stats = default_stats.copy()
@@ -393,7 +431,7 @@ async def scrape_h2h_stats(page: Page, h2h_url: str) -> MatchStats:
 
         for i, section in enumerate(sections):
             # Get section title to identify which section it is
-            title_el = await section.query_selector('.h2h__title, .section__title')
+            title_el = await section.query_selector(SELECTORS['h2h']['section_title'])
             title = ''
             if title_el:
                 title_text = await title_el.text_content()
@@ -433,6 +471,37 @@ async def scrape_h2h_stats(page: Page, h2h_url: str) -> MatchStats:
         }
 
 
+async def validate_selectors(page: Page) -> None:
+    """
+    Spot-check critical selectors on the volleyball page at startup.
+    Prints warnings for any selector matching 0 elements.
+    Non-blocking: scraping continues regardless of results.
+    """
+    try:
+        await page.goto(VOLLEYBALL_URL, wait_until='domcontentloaded', timeout=30000)
+        await page.wait_for_timeout(3000)
+
+        checks = {
+            'match rows':   SELECTORS['matches']['all_items'],
+            'next-day nav': SELECTORS['navigation']['next_day'],
+        }
+
+        all_ok = True
+        for label, selector in checks.items():
+            # Use first selector in a comma-separated fallback chain
+            count = await page.evaluate(
+                '(sel) => document.querySelectorAll(sel).length', selector
+            )
+            if count == 0:
+                print(f'  [selector-check] WARNING: "{label}" matched 0 elements ({selector})')
+                all_ok = False
+
+        if all_ok:
+            print('  [selector-check] All critical selectors OK')
+    except Exception as e:
+        print(f'  [selector-check] Could not validate selectors: {e}')
+
+
 async def scrape_flashscore(days_offset: int = 1) -> list[MatchWithStats]:
     """
     Main scraping function.
@@ -455,6 +524,9 @@ async def scrape_flashscore(days_offset: int = 1) -> list[MatchWithStats]:
         page = await context.new_page()
 
         try:
+            # Step 0: Validate selectors (non-blocking)
+            await validate_selectors(page)
+
             # Step 1: Get matches for target date (default: tomorrow)
             print(f"Fetching matches for {target_date.strftime('%d/%m/%Y')}...")
             matches = await extract_matches_for_date(page, days_offset)
