@@ -51,7 +51,7 @@ COLUMN_PRESETS = {
     # Modified spreadsheet structure (Spreadsheet 1 - test/modified version)
     # Sheet columns: A=DATE, I=Status, J=PAYS, K=LEAGUE, L=EQUIPE A, M=Rank A, N=EQUIPE B, O=Rank B
     # Stats: T-V=Team A (3,4,5 sets), AE-AG=Team B (3,4,5 sets), AJ-AL=H2H (3,4,5 sets)
-    'TRI BASE OU 4': {
+    'TRI BASE O/U 4': {
         'sheetName': 'TRI BASE O/U 4',
         'matchInfo': {
             'date': 'A', 'time': 'I', 'country': 'J', 'league': 'K',
@@ -103,13 +103,26 @@ def get_google_sheets_client():
     return build('sheets', 'v4', credentials=credentials)
 
 
+def find_next_empty_row(sheets, spreadsheet_id: str, sheet_name: str, col: str = 'A') -> int:
+    """Find the first empty row in the given column (1-indexed)."""
+    result = sheets.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id,
+        range=f"'{sheet_name}'!{col}:{col}",
+        majorDimension='COLUMNS'
+    ).execute()
+    values = result.get('values', [[]])
+    # Length of the column data = last row with content
+    return len(values[0]) + 1 if values and values[0] else 2
+
+
 def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2) -> None:
     """
-    Inject scraped data into Google Sheets (only GREEN columns)
+    Inject scraped data into Google Sheets (only GREEN columns).
+    Appends after the last row with data to avoid overwriting existing rows.
 
     Args:
         match_data: Array of match objects from scraper
-        start_row: Starting row (default: 2, assuming row 1 has headers)
+        start_row: Minimum starting row (default: 2, assuming row 1 has headers)
     """
     if not config.google.spreadsheet_id:
         raise ValueError('SPREADSHEET_ID not configured. Set it in .env or environment variable.')
@@ -120,7 +133,12 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
     sheet_name = config.sheets.tab_name or preset['sheetName']
 
     print(f'Injecting {len(match_data)} matches into "{sheet_name}"...')
-    print(f"Using column preset: {config.sheets.preset or 'TRI BASE OU 4'}")
+    print(f"Using column preset: {config.sheets.preset or 'ORIGINAL'}")
+
+    # Find the next empty row to append after existing data
+    next_empty = find_next_empty_row(sheets, spreadsheet_id, sheet_name)
+    start_row = max(start_row, next_empty)
+    print(f'Writing to rows {start_row}-{start_row + len(match_data) - 1} (appending after existing data)')
 
     value_ranges = []
     end_row = start_row + len(match_data) - 1

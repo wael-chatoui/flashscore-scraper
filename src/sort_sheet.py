@@ -43,42 +43,11 @@ def col_to_index(col_letter: str) -> int:
     return result - 1
 
 
-def parse_date(date_str: str):
-    """Parse date string in various formats to datetime object."""
-    from datetime import datetime
-
-    if not date_str:
-        return None
-
-    # Clean up the string (remove trailing quotes/apostrophes)
-    date_str = date_str.strip().rstrip("'\"")
-
-    # Try various formats
-    formats = [
-        '%d/%m/%Y',   # 21/01/2026
-        '%d/%m/%y',   # 21/01/26 or 22/1/26
-    ]
-
-    for fmt in formats:
-        try:
-            return datetime.strptime(date_str, fmt)
-        except ValueError:
-            continue
-
-    return None
-
-
-def format_date(dt) -> str:
-    """Format datetime to DD/MM/YYYY."""
-    if dt is None:
-        return ''
-    return dt.strftime('%d/%m/%Y')
-
 
 def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None:
     """
-    Sort Google Sheet by date column.
-    Reads all data, sorts by parsed date values, and rewrites.
+    Sort Google Sheet by date column using the native Sheets API SortRange request.
+    This sorts in-place, preserving all formulas and formatting.
 
     Args:
         descending: Sort newest first if True
@@ -98,52 +67,44 @@ def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None
     print(f"Sorting '{target_sheet}' by column {date_col} ({'descending' if descending else 'ascending'})...")
     print(f"  Spreadsheet: SPREADSHEET_ID_2")
 
-    # Read all data
-    result = sheets.spreadsheets().values().get(
+    # Get the numeric sheet ID needed for batchUpdate
+    sheet_id = get_sheet_id(sheets, spreadsheet_id, target_sheet)
+
+    # Get sheet dimensions to know the data range
+    sheet_meta = sheets.spreadsheets().get(
         spreadsheetId=spreadsheet_id,
-        range=f"'{target_sheet}'"
+        ranges=[f"'{target_sheet}'"],
+        includeGridData=False
+    ).execute()
+    grid_props = sheet_meta['sheets'][0]['properties']['gridProperties']
+    row_count = grid_props['rowCount']
+    col_count = grid_props['columnCount']
+
+    sort_order = 'DESCENDING' if descending else 'ASCENDING'
+
+    # Use native SortRange request - sorts in-place, preserves formulas
+    sheets.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={
+            'requests': [{
+                'sortRange': {
+                    'range': {
+                        'sheetId': sheet_id,
+                        'startRowIndex': 1,  # skip header row
+                        'endRowIndex': row_count,
+                        'startColumnIndex': 0,
+                        'endColumnIndex': col_count
+                    },
+                    'sortSpecs': [{
+                        'dimensionIndex': date_col_index,
+                        'sortOrder': sort_order
+                    }]
+                }
+            }]
+        }
     ).execute()
 
-    values = result.get('values', [])
-    if len(values) < 2:
-        print("No data to sort")
-        return
-
-    # Separate header and data rows
-    header = values[0]
-    data_rows = values[1:]
-
-    print(f"  Rows to sort: {len(data_rows)}")
-
-    # Sort data rows by parsed date
-    def sort_key(row):
-        if len(row) > date_col_index:
-            dt = parse_date(row[date_col_index])
-            if dt:
-                return (dt.year, dt.month, dt.day)
-        return (0, 0, 0)
-
-    sorted_rows = sorted(data_rows, key=sort_key, reverse=descending)
-
-    # Standardize date format to DD/MM/YYYY
-    for row in sorted_rows:
-        if len(row) > date_col_index and row[date_col_index]:
-            dt = parse_date(row[date_col_index])
-            if dt:
-                row[date_col_index] = format_date(dt)
-
-    # Combine header with sorted data
-    all_rows = [header] + sorted_rows
-
-    # Write back to sheet
-    sheets.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id,
-        range=f"'{target_sheet}'!A1",
-        valueInputOption='RAW',
-        body={'values': all_rows}
-    ).execute()
-
-    print("Done! Sheet sorted by date.")
+    print("Done! Sheet sorted by date (formulas preserved).")
 
 
 def main():
