@@ -143,7 +143,7 @@ async def main() -> None:
 
         # Sort sheet by date after injection
         print('\n[3/3] Sorting sheet by date...\n')
-        sort_sheet_by_date()
+        sort_sheet_by_date(descending=True)
 
     print_summary(match_data)
     print('\nDone!')
