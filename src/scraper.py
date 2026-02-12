@@ -542,7 +542,7 @@ async def validate_selectors(page: Page) -> None:
         print(f'  [selector-check] Could not validate selectors: {e}')
 
 
-async def scrape_flashscore(days_offset: int = 1) -> list[MatchWithStats]:
+async def scrape_flashscore(days_offset: int = 0) -> list[MatchWithStats]:
     """
     Main scraping function.
 

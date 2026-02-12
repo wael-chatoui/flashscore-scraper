@@ -63,7 +63,7 @@ async def main() -> None:
     scrape_today = '--today' in args
 
     # Parse --days=N argument for custom offset
-    days_offset = 1  # Default: tomorrow (J+1)
+    days_offset = 0  # Default: today (J+0)
     for arg in args:
         if arg.startswith('--days='):
             try:
