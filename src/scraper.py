@@ -408,9 +408,15 @@ async def extract_today_matches(page: Page) -> list[Match]:
     return await extract_matches_for_date(page, days_offset=0)
 
 
-async def scrape_h2h_stats(page: Page, h2h_url: str) -> MatchStats:
+async def scrape_h2h_stats(page: Page, h2h_url: str, team_a: str = '', team_b: str = '') -> MatchStats:
     """
-    Scrape H2H stats for a specific match
+    Scrape H2H stats for a specific match.
+
+    Args:
+        page: Playwright page object
+        h2h_url: URL of the H2H page
+        team_a: Home team name (used to match section titles)
+        team_b: Away team name (used to match section titles)
     """
     default_stats: SetStats = {'count3': 0, 'count4': 0, 'count5': 0}
 
@@ -429,7 +435,15 @@ async def scrape_h2h_stats(page: Page, h2h_url: str) -> MatchStats:
         team_b_stats = default_stats.copy()
         h2h_stats = default_stats.copy()
 
-        for i, section in enumerate(sections):
+        team_a_lower = team_a.lower()
+        team_b_lower = team_b.lower()
+
+        # Track which teams we've matched by title
+        matched_a = False
+        matched_b = False
+        matched_h2h = False
+
+        for section in sections:
             # Get section title to identify which section it is
             title_el = await section.query_selector(SELECTORS['h2h']['section_title'])
             title = ''
@@ -439,23 +453,49 @@ async def scrape_h2h_stats(page: Page, h2h_url: str) -> MatchStats:
 
             stats = await count_sets_in_section(section)
 
-            # Identify section by index (typically: 0=Team A, 1=Team B, 2=H2H)
-            # Or by title containing team names or "confrontations"
-            if i == 0 or 'derniers matchs' in title:
-                if i == 0:
-                    team_a_stats = stats
-                elif i == 1:
-                    team_b_stats = stats
-            elif 'confrontation' in title or i == 2:
+            # Match by title content: "Derniers matchs de [Team]" or "Confrontations directes"
+            if 'confrontation' in title:
                 h2h_stats = stats
-
-            # Fallback: assign by index
-            if i == 0:
+                matched_h2h = True
+            elif team_a_lower and team_a_lower in title:
                 team_a_stats = stats
-            elif i == 1:
+                matched_a = True
+            elif team_b_lower and team_b_lower in title:
                 team_b_stats = stats
-            elif i == 2:
-                h2h_stats = stats
+                matched_b = True
+
+        # Fallback: if title matching failed, assign unmatched sections by index
+        if not (matched_a and matched_b and matched_h2h):
+            unmatched_sections = []
+            for i, section in enumerate(sections):
+                title_el = await section.query_selector(SELECTORS['h2h']['section_title'])
+                title = ''
+                if title_el:
+                    title_text = await title_el.text_content()
+                    title = (title_text or '').lower()
+
+                # Skip sections already matched
+                if matched_h2h and 'confrontation' in title:
+                    continue
+                if matched_a and team_a_lower and team_a_lower in title:
+                    continue
+                if matched_b and team_b_lower and team_b_lower in title:
+                    continue
+
+                unmatched_sections.append(section)
+
+            # Assign unmatched sections by order to unfilled slots
+            for section in unmatched_sections:
+                stats = await count_sets_in_section(section)
+                if not matched_a:
+                    team_a_stats = stats
+                    matched_a = True
+                elif not matched_b:
+                    team_b_stats = stats
+                    matched_b = True
+                elif not matched_h2h:
+                    h2h_stats = stats
+                    matched_h2h = True
 
         return {
             'teamAStats': team_a_stats,
@@ -574,7 +614,7 @@ async def scrape_flashscore(days_offset: int = 1) -> list[MatchWithStats]:
                 match_data = {k: v for k, v in match.items() if k != 'leagueUrl'}
 
                 if match['matchUrl']:
-                    stats = await scrape_h2h_stats(page, match['matchUrl'])
+                    stats = await scrape_h2h_stats(page, match['matchUrl'], match['teamA'], match['teamB'])
                     results.append({
                         **match_data,
                         **stats
