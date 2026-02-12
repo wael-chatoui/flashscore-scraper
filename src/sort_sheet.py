@@ -16,10 +16,10 @@ from config import config
 
 
 def get_spreadsheet_id() -> str:
-    """Get SPREADSHEET_ID_2 (client's original spreadsheet)"""
-    spreadsheet_id = os.getenv('SPREADSHEET_ID_2')
+    """Get SPREADSHEET_ID_2 (client's original spreadsheet), falls back to SPREADSHEET_ID"""
+    spreadsheet_id = os.getenv('SPREADSHEET_ID_2') or os.getenv('SPREADSHEET_ID')
     if not spreadsheet_id:
-        raise ValueError('SPREADSHEET_ID_2 not configured. Set it in .env')
+        raise ValueError('SPREADSHEET_ID_2 (or SPREADSHEET_ID) not configured. Set it in .env')
     return spreadsheet_id
 
 
