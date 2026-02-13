@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import TypedDict
 from playwright.async_api import async_playwright, Page, ElementHandle
 
-from config import config
+from .config import config
 
 BASE_URL = 'https://www.flashscore.fr'
 VOLLEYBALL_URL = f'{BASE_URL}/volleyball/'

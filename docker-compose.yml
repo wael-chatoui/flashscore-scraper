@@ -24,7 +24,7 @@ services:
     # Mount credentials file if using file-based auth
     volumes:
       - ./credentials.json:/app/credentials.json:ro
-      - ./output:/app/src/output
+      - ./output:/app/output
 
     # For cron scheduling, use restart policy
     restart: "no"

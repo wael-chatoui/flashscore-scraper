@@ -7,7 +7,7 @@ import asyncio
 import json
 import sys
 
-from scraper import scrape_flashscore
+from .scraper import scrape_flashscore
 
 
 async def test() -> None:

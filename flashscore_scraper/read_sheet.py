@@ -16,7 +16,7 @@ from typing import Any
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-from config import config
+from .config import config
 
 
 def get_google_sheets_client():

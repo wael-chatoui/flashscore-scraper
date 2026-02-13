@@ -49,7 +49,7 @@ if [ -d "$PROJECT_DIR/.venv" ]; then
     source "$PROJECT_DIR/.venv/bin/activate"
 else
     log "ERROR: Virtual environment not found at $PROJECT_DIR/.venv"
-    log "Run: python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt"
+    log "Run: python3 -m venv .venv && source .venv/bin/activate && pip install -e ."
     exit 1
 fi
 
@@ -58,8 +58,8 @@ export GOOGLE_CREDENTIALS_PATH="${GOOGLE_CREDENTIALS_PATH:-$PROJECT_DIR/credenti
 
 # Run the scraper
 log "Running scraper..."
-cd "$PROJECT_DIR/src"
-python main.py 2>&1 | tee -a "$LOG_FILE"
+cd "$PROJECT_DIR"
+python -m flashscore_scraper 2>&1 | tee -a "$LOG_FILE"
 
 EXIT_CODE=${PIPESTATUS[0]}
 

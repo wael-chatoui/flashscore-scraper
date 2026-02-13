@@ -11,8 +11,8 @@ Usage:
 
 import os
 import sys
-from sheets import get_google_sheets_client, COLUMN_PRESETS
-from config import config
+from .sheets import get_google_sheets_client, COLUMN_PRESETS
+from .config import config
 
 
 def get_spreadsheet_id() -> str:

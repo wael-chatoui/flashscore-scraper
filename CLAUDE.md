@@ -14,47 +14,50 @@ FlashScore Volleyball Scraper - A Python tool that scrapes volleyball match data
 ## Project Structure
 
 ```
-scriping-sports/
-├── src/
-│   ├── __init__.py       # Package marker
-│   ├── config.py         # Configuration (dataclass + env vars)
-│   ├── scraper.py        # Playwright scraper (async)
-│   ├── sheets.py         # Google Sheets integration
-│   ├── main.py           # CLI entry point
-│   ├── read_sheet.py     # Utility to inspect Google Sheet
-│   └── test_scraper.py   # Debug test script
+flashscore-scraper/
+├── flashscore_scraper/         # Main Python package
+│   ├── __init__.py             # Package marker
+│   ├── __main__.py             # python -m flashscore_scraper entry point
+│   ├── config.py               # Configuration (dataclass + env vars)
+│   ├── scraper.py              # Playwright scraper (async)
+│   ├── sheets.py               # Google Sheets integration
+│   ├── sort_sheet.py           # Sheet sorting by date
+│   ├── main.py                 # CLI entry point
+│   ├── batch_scrape.py         # Multi-day batch scraper
+│   ├── read_sheet.py           # Utility to inspect Google Sheet
+│   ├── test_scraper.py         # Debug test script
+│   └── test_sheets.py          # Sheets connectivity test
 ├── scripts/
-│   ├── run_scraper.sh    # Runner script for cron/systemd
-│   ├── install_cron.sh   # Install scheduled tasks
+│   ├── run_scraper.sh          # Runner script for cron/systemd
+│   ├── install_cron.sh         # Install scheduled tasks
 │   ├── flashscore-scraper.service  # Systemd service
 │   └── flashscore-scraper.timer    # Systemd timer
-├── requirements.txt      # Python dependencies
-├── Dockerfile            # Docker image (Python/Playwright)
-├── docker-compose.yml    # Docker orchestration
-├── .env.example          # Environment template
-├── credentials.json      # Google service account (gitignored)
-├── output/               # JSON output directory
-└── logs/                 # Log files directory
+├── pyproject.toml              # Package definition & dependencies
+├── requirements.txt            # Legacy dependency list
+├── Dockerfile                  # Docker image (Python/Playwright)
+├── docker-compose.yml          # Docker orchestration
+├── .env.example                # Environment template
+├── credentials.json            # Google service account (gitignored)
+├── output/                     # JSON output directory
+└── logs/                       # Log files directory
 ```
 
 ## Commands
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Install (recommended)
+pip install -e .
 playwright install chromium
 
-# Run scraper (from src/ directory)
-cd src && python main.py                    # Full: scrape + sheets
-cd src && python main.py --scrape-only      # Only scrape, save JSON
-cd src && python main.py --sheets-only --json=file.json  # Only inject
+# Run from anywhere
+flashscore-scraper                                       # Full: scrape + sheets
+flashscore-scraper --scrape-only                         # Only scrape, save JSON
+flashscore-scraper --sheets-only --json=file.json        # Only inject
+flashscore-scraper --days=-2                             # Custom date offset
 
-# Test with visible browser
-cd src && python test_scraper.py
-
-# Inspect Google Sheet structure
-cd src && python read_sheet.py --list
-cd src && python read_sheet.py "TRI BASE O/U 4"
+# Or without pip install, from project root:
+python -m flashscore_scraper
+python -m flashscore_scraper --scrape-only
 
 # Docker
 docker compose up --build
@@ -88,7 +91,7 @@ cat logs/scraper_$(date +%Y-%m-%d).log
 ### Docker Scheduling (Alternative)
 
 ```bash
-# Start with ofelia scheduler (runs at 8:00 AM daily)
+# Start with ofelia scheduler (runs at 1:00 AM daily)
 docker compose --profile scheduled up -d
 ```
 
@@ -131,9 +134,16 @@ class Config:
     sheets: SheetsConfig
 ```
 
+### Relative Imports
+All imports within the package use relative imports:
+```python
+from .config import config
+from .scraper import scrape_flashscore
+```
+
 ## CSS Selectors (FlashScore)
 
-All CSS selectors are centralized in the `SELECTORS` dict at the top of `src/scraper.py`.
+All CSS selectors are centralized in the `SELECTORS` dict at the top of `flashscore_scraper/scraper.py`.
 
 When FlashScore changes their HTML, update the `SELECTORS` dict only — every Python call and JS `page.evaluate()` reads from it.
 
@@ -186,8 +196,7 @@ Use clear, descriptive commit messages:
 
 After making changes, suggest running:
 ```bash
-cd src && python test_scraper.py  # For scraper changes
-cd src && python main.py --scrape-only  # For integration test
+python -m flashscore_scraper --scrape-only  # Integration test
 ```
 
 ### 6. Don't Overengineer

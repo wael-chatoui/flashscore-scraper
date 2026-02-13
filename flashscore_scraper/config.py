@@ -21,7 +21,10 @@ class GoogleConfig:
 
     # Path to Google service account credentials JSON file
     # Download from Google Cloud Console > APIs & Services > Credentials
-    credentials_path: str = field(default_factory=lambda: os.getenv('GOOGLE_CREDENTIALS_PATH', './credentials.json'))
+    credentials_path: str = field(default_factory=lambda: os.getenv(
+        'GOOGLE_CREDENTIALS_PATH',
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'credentials.json')
+    ))
 
 
 @dataclass

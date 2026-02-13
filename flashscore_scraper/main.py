@@ -3,12 +3,14 @@
 FlashScore Volleyball Scraper - Main Entry Point
 
 Usage:
-    python main.py                     # Full mode: scrape tomorrow's matches (J+1) + sheets
-    python main.py --today             # Scrape today's matches (J+0)
-    python main.py --days=-2           # Scrape matches from 2 days ago (J-2)
-    python main.py --days=2            # Scrape matches 2 days from now (J+2)
-    python main.py --scrape-only       # Only scrape, save to JSON
-    python main.py --sheets-only --json=file.json  # Only inject to sheets from JSON
+    flashscore-scraper                                # Full mode: scrape today's matches + sheets
+    flashscore-scraper --today                        # Scrape today's matches (J+0)
+    flashscore-scraper --days=-2                      # Scrape matches from 2 days ago (J-2)
+    flashscore-scraper --days=2                       # Scrape matches 2 days from now (J+2)
+    flashscore-scraper --scrape-only                  # Only scrape, save to JSON
+    flashscore-scraper --sheets-only --json=file.json # Only inject to sheets from JSON
+
+    # Or: python -m flashscore_scraper [args]
 """
 
 import asyncio
@@ -18,10 +20,10 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any
 
-from config import config
-from scraper import scrape_flashscore
-from sheets import inject_to_google_sheets
-from sort_sheet import sort_sheet_by_date
+from .config import config
+from .scraper import scrape_flashscore
+from .sheets import inject_to_google_sheets
+from .sort_sheet import sort_sheet_by_date
 
 
 def print_summary(match_data: list[dict[str, Any]]) -> None:
@@ -106,9 +108,11 @@ async def main() -> None:
 
         print(f'\nScraped {len(match_data)} matches')
 
-        # Save to JSON file (in output dir if exists, otherwise current dir)
+        # Save to JSON file in output/ at project root
         # Use target date in filename (the date of the matches, not today)
-        output_dir = './output' if os.path.exists('./output') else '.'
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        output_dir = os.path.join(project_root, 'output')
+        os.makedirs(output_dir, exist_ok=True)
         output_file = os.path.join(output_dir, f"matches_{target_date.strftime('%Y-%m-%d')}.json")
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(match_data, f, indent=2, ensure_ascii=False)
@@ -149,9 +153,14 @@ async def main() -> None:
     print('\nDone!')
 
 
-if __name__ == '__main__':
+def cli() -> None:
+    """Console script entry point for `flashscore-scraper` command."""
     try:
         asyncio.run(main())
     except Exception as err:
         print(f'Fatal error: {err}')
         sys.exit(1)
+
+
+if __name__ == '__main__':
+    cli()

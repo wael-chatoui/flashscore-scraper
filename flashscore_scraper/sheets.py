@@ -11,7 +11,7 @@ from typing import Any
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-from config import config
+from .config import config
 
 # Column mapping - configurable based on actual sheet structure
 #
