@@ -22,7 +22,7 @@ from typing import Any
 
 from .config import config
 from .scraper import scrape_flashscore
-from .sheets import inject_to_google_sheets
+from .sheets import inject_to_google_sheets, inject_original_formulas
 from .sort_sheet import sort_sheet_by_date
 
 
@@ -102,7 +102,7 @@ async def main() -> None:
 
     # Step 1: Scrape data (unless sheets-only mode)
     if not sheets_only:
-        print(f"\n[1/3] Scraping FlashScore volleyball matches for {target_date.strftime('%d/%m/%Y')}...\n")
+        print(f"\n[1/4] Scraping FlashScore volleyball matches for {target_date.strftime('%d/%m/%Y')}...\n")
 
         match_data = await scrape_flashscore(days_offset=days_offset)
 
@@ -125,7 +125,7 @@ async def main() -> None:
 
     # Step 2: Inject to Google Sheets (unless scrape-only mode)
     if not scrape_only:
-        print('\n[2/3] Injecting data into Google Sheets...\n')
+        print('\n[2/4] Injecting data into Google Sheets...\n')
 
         # Load from JSON if sheets-only mode
         if sheets_only and json_file:
@@ -146,8 +146,12 @@ async def main() -> None:
         inject_to_google_sheets(match_data, config.sheets.start_row)
 
         # Sort sheet by date after injection
-        print('\n[3/3] Sorting sheet by date...\n')
+        print('\n[3/4] Sorting sheet by date...\n')
         sort_sheet_by_date(descending=True)
+
+        # Inject formulas AFTER sorting so IF() cell references are stable
+        print('\n[4/4] Injecting formulas...\n')
+        inject_original_formulas()
 
     print_summary(match_data)
     print('\nDone!')

@@ -201,10 +201,70 @@ def find_next_empty_row(sheets, spreadsheet_id: str, sheet_name: str, col: str =
     return len(values[0]) + 1 if values and values[0] else 2
 
 
+def _delete_rows_by_date(sheets, spreadsheet_id: str, sheet_name: str, target_date: str) -> int:
+    """Delete all rows where column A matches target_date.
+
+    Works bottom-up so that row indices stay valid during deletion.
+    Returns the number of deleted rows.
+    """
+    result = sheets.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id,
+        range=f"'{sheet_name}'!A:A",
+        majorDimension='COLUMNS'
+    ).execute()
+    values = result.get('values', [[]])
+    if not values or not values[0]:
+        return 0
+
+    col_a = values[0]
+
+    # Find matching row indices (0-based in col_a, but row 0 = header)
+    matching_rows = []
+    for i in range(1, len(col_a)):  # skip header at index 0
+        cell = str(col_a[i]).strip()
+        if cell == target_date:
+            matching_rows.append(i + 1)  # convert to 1-indexed sheet row
+
+    if not matching_rows:
+        return 0
+
+    # Get numeric sheet ID
+    meta = sheets.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet_id = None
+    for sheet in meta.get('sheets', []):
+        if sheet['properties']['title'] == sheet_name:
+            sheet_id = sheet['properties']['sheetId']
+            break
+    if sheet_id is None:
+        raise ValueError(f"Sheet '{sheet_name}' not found")
+
+    # Build delete requests bottom-up (so indices stay valid)
+    requests = []
+    for row in sorted(matching_rows, reverse=True):
+        requests.append({
+            'deleteDimension': {
+                'range': {
+                    'sheetId': sheet_id,
+                    'dimension': 'ROWS',
+                    'startIndex': row - 1,  # 0-indexed
+                    'endIndex': row          # exclusive
+                }
+            }
+        })
+
+    sheets.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={'requests': requests}
+    ).execute()
+
+    return len(matching_rows)
+
+
 def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2) -> None:
     """
     Inject scraped data into Google Sheets (only GREEN columns).
-    Appends after the last row with data to avoid overwriting existing rows.
+    Deduplicates by date: if rows for the same date already exist, they are
+    deleted first so re-running replaces rather than duplicates.
 
     Args:
         match_data: Array of match objects from scraper
@@ -220,6 +280,15 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
 
     print(f'Injecting {len(match_data)} matches into "{sheet_name}"...')
     print(f"Using column preset: {config.sheets.preset or 'ORIGINAL'}")
+
+    # Deduplicate: delete existing rows for the same date(s)
+    dates_in_batch = {m.get('date', '') for m in match_data if m.get('date')}
+    total_deleted = 0
+    for date_str in dates_in_batch:
+        deleted = _delete_rows_by_date(sheets, spreadsheet_id, sheet_name, date_str)
+        total_deleted += deleted
+    if total_deleted:
+        print(f'Dedup: removed {total_deleted} existing rows for date(s) {", ".join(sorted(dates_in_batch))}')
 
     # Find the next empty row to append after existing data
     next_empty = find_next_empty_row(sheets, spreadsheet_id, sheet_name)
@@ -322,11 +391,6 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
         'values': h2h_values
     })
 
-    # Inject formulas for computed columns (ORIGINAL preset only)
-    preset_name = config.sheets.preset or 'ORIGINAL'
-    if preset_name == 'ORIGINAL':
-        value_ranges.extend(_build_original_formulas(sheet_name, start_row, end_row))
-
     # Batch update all values (won't touch other columns)
     sheets.spreadsheets().values().batchUpdate(
         spreadsheetId=spreadsheet_id,
@@ -345,5 +409,41 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
     print(f"  - Team A stats: {preset['teamA']['set3']}-{preset['teamA']['set5']}")
     print(f"  - Team B stats: {preset['teamB']['set3']}-{preset['teamB']['set5']}")
     print(f"  - H2H stats: {preset['h2h']['set3']}-{preset['h2h']['set5']}")
-    if preset_name == 'ORIGINAL':
-        print(f"  - Formulas: I, L, P-V, W, AA-AG, AI, AM-AS")
+
+
+def inject_original_formulas() -> None:
+    """Inject formulas for ORIGINAL preset computed columns.
+
+    Must be called AFTER sorting so that row references in IF() formulas
+    match the final row positions. Covers all data rows (2 through last).
+    """
+    preset_name = config.sheets.preset or 'ORIGINAL'
+    if preset_name != 'ORIGINAL':
+        return
+
+    spreadsheet_id = config.google.spreadsheet_id
+    if not spreadsheet_id:
+        return
+
+    sheets = get_google_sheets_client()
+    preset = get_column_preset()
+    sheet_name = config.sheets.tab_name or preset['sheetName']
+
+    last_row = find_next_empty_row(sheets, spreadsheet_id, sheet_name) - 1
+    if last_row < 2:
+        print('No data rows found, skipping formula injection.')
+        return
+
+    print(f'Injecting formulas for rows 2-{last_row} in "{sheet_name}"...')
+
+    formula_ranges = _build_original_formulas(sheet_name, 2, last_row)
+
+    sheets.spreadsheets().values().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={
+            'valueInputOption': 'USER_ENTERED',
+            'data': formula_ranges
+        }
+    ).execute()
+
+    print(f'Formulas injected: I, L, P-V, W, AA-AG, AI, AM-AS (rows 2-{last_row})')

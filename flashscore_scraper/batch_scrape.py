@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 
 from .config import config
 from .scraper import scrape_flashscore
-from .sheets import inject_to_google_sheets
+from .sheets import inject_to_google_sheets, inject_original_formulas
 from .sort_sheet import sort_sheet_by_date
 
 
@@ -122,6 +122,9 @@ async def main():
 
     print('\nSorting sheet by date (once)...')
     sort_sheet_by_date()
+
+    print('\nInjecting formulas (after sort)...')
+    inject_original_formulas()
 
     print(f'\nDone! Injected {len(all_data)} matches total.')
 
