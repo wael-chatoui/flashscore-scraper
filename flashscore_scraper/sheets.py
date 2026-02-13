@@ -99,11 +99,11 @@ def _build_original_formulas(sheet_name: str, start_row: int, end_row: int) -> l
             [
                 f'=N{r}+O{r}',                    # P: 4+
                 f'=M{r}+N{r}+O{r}',               # Q: TOTAL MATCH
-                f'=IF(Q{r}=0,"",L{r}/Q{r})',       # R: MOY SET MATCH A
-                f'=IF(Q{r}=0,"",M{r}/Q{r})',       # S: MOY 3 SET A
-                f'=IF(Q{r}=0,"",N{r}/Q{r})',       # T: MOY 4 SET A
-                f'=IF(Q{r}=0,"",O{r}/Q{r})',       # U: MOY 5 SET A
-                f'=IF(Q{r}=0,"",P{r}/Q{r})',       # V: MOY 4+
+                f'=IF(Q{r}=0;"";L{r}/Q{r})',       # R: MOY SET MATCH A
+                f'=IF(Q{r}=0;"";M{r}/Q{r})',       # S: MOY 3 SET A
+                f'=IF(Q{r}=0;"";N{r}/Q{r})',       # T: MOY 4 SET A
+                f'=IF(Q{r}=0;"";O{r}/Q{r})',       # U: MOY 5 SET A
+                f'=IF(Q{r}=0;"";P{r}/Q{r})',       # V: MOY 4+
             ]
             for r in rows
         ]
@@ -122,11 +122,11 @@ def _build_original_formulas(sheet_name: str, start_row: int, end_row: int) -> l
             [
                 f'=Y{r}+Z{r}',                      # AA: 4+
                 f'=X{r}+Y{r}+Z{r}',                 # AB: TOTAL MATCH B
-                f'=IF(AB{r}=0,"",W{r}/AB{r})',       # AC: MOY SET MATCH B
-                f'=IF(AB{r}=0,"",X{r}/AB{r})',       # AD: MOY 3 B
-                f'=IF(AB{r}=0,"",Y{r}/AB{r})',       # AE: MOY 4 B
-                f'=IF(AB{r}=0,"",Z{r}/AB{r})',       # AF: MOY 5 B
-                f'=IF(AB{r}=0,"",AA{r}/AB{r})',      # AG: MOY 4+ B
+                f'=IF(AB{r}=0;"";W{r}/AB{r})',       # AC: MOY SET MATCH B
+                f'=IF(AB{r}=0;"";X{r}/AB{r})',       # AD: MOY 3 B
+                f'=IF(AB{r}=0;"";Y{r}/AB{r})',       # AE: MOY 4 B
+                f'=IF(AB{r}=0;"";Z{r}/AB{r})',       # AF: MOY 5 B
+                f'=IF(AB{r}=0;"";AA{r}/AB{r})',      # AG: MOY 4+ B
             ]
             for r in rows
         ]
@@ -145,11 +145,11 @@ def _build_original_formulas(sheet_name: str, start_row: int, end_row: int) -> l
             [
                 f'=AK{r}+AL{r}',                      # AM: 4+
                 f'=AJ{r}+AK{r}+AL{r}',                # AN: TOTAL H2H
-                f'=IF(AN{r}=0,"",AI{r}/AN{r})',        # AO: MOY H2H SET
-                f'=IF(AN{r}=0,"",AJ{r}/AN{r})',        # AP: MOY H2H 3 SET
-                f'=IF(AN{r}=0,"",AK{r}/AN{r})',        # AQ: MOY H2H 4 SET
-                f'=IF(AN{r}=0,"",AL{r}/AN{r})',        # AR: MOY H2H 5 SET
-                f'=IF(AN{r}=0,"",AM{r}/AN{r})',        # AS: MOY H2H 4+ SET
+                f'=IF(AN{r}=0;"";AI{r}/AN{r})',        # AO: MOY H2H SET
+                f'=IF(AN{r}=0;"";AJ{r}/AN{r})',        # AP: MOY H2H 3 SET
+                f'=IF(AN{r}=0;"";AK{r}/AN{r})',        # AQ: MOY H2H 4 SET
+                f'=IF(AN{r}=0;"";AL{r}/AN{r})',        # AR: MOY H2H 5 SET
+                f'=IF(AN{r}=0;"";AM{r}/AN{r})',        # AS: MOY H2H 4+ SET
             ]
             for r in rows
         ]
