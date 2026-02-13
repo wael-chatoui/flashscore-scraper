@@ -293,10 +293,33 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
     # Find the next empty row to append after existing data
     next_empty = find_next_empty_row(sheets, spreadsheet_id, sheet_name)
     start_row = max(start_row, next_empty)
-    print(f'Writing to rows {start_row}-{start_row + len(match_data) - 1} (appending after existing data)')
+    end_row = start_row + len(match_data) - 1
+    print(f'Writing to rows {start_row}-{end_row} (appending after existing data)')
+
+    # Ensure sheet has enough rows (deleteDimension can shrink the grid)
+    meta = sheets.spreadsheets().get(
+        spreadsheetId=spreadsheet_id,
+        ranges=[f"'{sheet_name}'"],
+        includeGridData=False
+    ).execute()
+    sheet_props = meta['sheets'][0]['properties']
+    sheet_id = sheet_props['sheetId']
+    current_rows = sheet_props['gridProperties']['rowCount']
+    if end_row > current_rows:
+        rows_to_add = end_row - current_rows
+        sheets.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={'requests': [{
+                'appendDimension': {
+                    'sheetId': sheet_id,
+                    'dimension': 'ROWS',
+                    'length': rows_to_add
+                }
+            }]}
+        ).execute()
+        print(f'Expanded sheet by {rows_to_add} rows (was {current_rows}, now {end_row})')
 
     value_ranges = []
-    end_row = start_row + len(match_data) - 1
 
     # Match info - handle contiguous columns (A-H for ORIGINAL, or A + I-O for modified)
     if preset.get('matchInfo'):
