@@ -72,6 +72,92 @@ COLUMN_PRESETS = {
 }
 
 
+def _build_original_formulas(sheet_name: str, start_row: int, end_row: int) -> list[dict]:
+    """Build formula value_ranges for ORIGINAL preset computed columns.
+
+    Covers columns I, L, P-V (Team A), W, AA-AG (Team B), AI, AM-AS (H2H).
+    """
+    rows = range(start_row, end_row + 1)
+    formula_ranges = []
+
+    # Column I: ECART (rank difference)
+    formula_ranges.append({
+        'range': f"'{sheet_name}'!I{start_row}:I{end_row}",
+        'values': [[f'=F{r}-H{r}'] for r in rows]
+    })
+
+    # Column L: N;TOTAL SET A
+    formula_ranges.append({
+        'range': f"'{sheet_name}'!L{start_row}:L{end_row}",
+        'values': [[f'=M{r}*3+N{r}*4+O{r}*5'] for r in rows]
+    })
+
+    # Columns P-V: Team A derived stats
+    formula_ranges.append({
+        'range': f"'{sheet_name}'!P{start_row}:V{end_row}",
+        'values': [
+            [
+                f'=N{r}+O{r}',                    # P: 4+
+                f'=M{r}+N{r}+O{r}',               # Q: TOTAL MATCH
+                f'=IF(Q{r}=0,"",L{r}/Q{r})',       # R: MOY SET MATCH A
+                f'=IF(Q{r}=0,"",M{r}/Q{r})',       # S: MOY 3 SET A
+                f'=IF(Q{r}=0,"",N{r}/Q{r})',       # T: MOY 4 SET A
+                f'=IF(Q{r}=0,"",O{r}/Q{r})',       # U: MOY 5 SET A
+                f'=IF(Q{r}=0,"",P{r}/Q{r})',       # V: MOY 4+
+            ]
+            for r in rows
+        ]
+    })
+
+    # Column W: N;TOTAL SET B
+    formula_ranges.append({
+        'range': f"'{sheet_name}'!W{start_row}:W{end_row}",
+        'values': [[f'=X{r}*3+Y{r}*4+Z{r}*5'] for r in rows]
+    })
+
+    # Columns AA-AG: Team B derived stats
+    formula_ranges.append({
+        'range': f"'{sheet_name}'!AA{start_row}:AG{end_row}",
+        'values': [
+            [
+                f'=Y{r}+Z{r}',                      # AA: 4+
+                f'=X{r}+Y{r}+Z{r}',                 # AB: TOTAL MATCH B
+                f'=IF(AB{r}=0,"",W{r}/AB{r})',       # AC: MOY SET MATCH B
+                f'=IF(AB{r}=0,"",X{r}/AB{r})',       # AD: MOY 3 B
+                f'=IF(AB{r}=0,"",Y{r}/AB{r})',       # AE: MOY 4 B
+                f'=IF(AB{r}=0,"",Z{r}/AB{r})',       # AF: MOY 5 B
+                f'=IF(AB{r}=0,"",AA{r}/AB{r})',      # AG: MOY 4+ B
+            ]
+            for r in rows
+        ]
+    })
+
+    # Column AI: H2H N.TOTAL SET
+    formula_ranges.append({
+        'range': f"'{sheet_name}'!AI{start_row}:AI{end_row}",
+        'values': [[f'=AJ{r}*3+AK{r}*4+AL{r}*5'] for r in rows]
+    })
+
+    # Columns AM-AS: H2H derived stats
+    formula_ranges.append({
+        'range': f"'{sheet_name}'!AM{start_row}:AS{end_row}",
+        'values': [
+            [
+                f'=AK{r}+AL{r}',                      # AM: 4+
+                f'=AJ{r}+AK{r}+AL{r}',                # AN: TOTAL H2H
+                f'=IF(AN{r}=0,"",AI{r}/AN{r})',        # AO: MOY H2H SET
+                f'=IF(AN{r}=0,"",AJ{r}/AN{r})',        # AP: MOY H2H 3 SET
+                f'=IF(AN{r}=0,"",AK{r}/AN{r})',        # AQ: MOY H2H 4 SET
+                f'=IF(AN{r}=0,"",AL{r}/AN{r})',        # AR: MOY H2H 5 SET
+                f'=IF(AN{r}=0,"",AM{r}/AN{r})',        # AS: MOY H2H 4+ SET
+            ]
+            for r in rows
+        ]
+    })
+
+    return formula_ranges
+
+
 def get_column_preset() -> dict:
     """Get active preset from config or default"""
     preset_name = config.sheets.preset or 'ORIGINAL'
@@ -236,6 +322,11 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
         'values': h2h_values
     })
 
+    # Inject formulas for computed columns (ORIGINAL preset only)
+    preset_name = config.sheets.preset or 'ORIGINAL'
+    if preset_name == 'ORIGINAL':
+        value_ranges.extend(_build_original_formulas(sheet_name, start_row, end_row))
+
     # Batch update all values (won't touch other columns)
     sheets.spreadsheets().values().batchUpdate(
         spreadsheetId=spreadsheet_id,
@@ -254,3 +345,5 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
     print(f"  - Team A stats: {preset['teamA']['set3']}-{preset['teamA']['set5']}")
     print(f"  - Team B stats: {preset['teamB']['set3']}-{preset['teamB']['set5']}")
     print(f"  - H2H stats: {preset['h2h']['set3']}-{preset['h2h']['set5']}")
+    if preset_name == 'ORIGINAL':
+        print(f"  - Formulas: I, L, P-V, W, AA-AG, AI, AM-AS")
