@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Sort Google Sheet data by date column.
-Targets SPREADSHEET_ID_2 (client's original spreadsheet).
 
 Usage:
     python sort_sheet.py                    # Sort by date (ascending)
@@ -16,10 +15,10 @@ from .config import config
 
 
 def get_spreadsheet_id() -> str:
-    """Get SPREADSHEET_ID_2 (client's original spreadsheet), falls back to SPREADSHEET_ID"""
-    spreadsheet_id = os.getenv('SPREADSHEET_ID_2') or os.getenv('SPREADSHEET_ID')
+    """Get SPREADSHEET_ID from environment"""
+    spreadsheet_id = os.getenv('SPREADSHEET_ID')
     if not spreadsheet_id:
-        raise ValueError('SPREADSHEET_ID_2 (or SPREADSHEET_ID) not configured. Set it in .env')
+        raise ValueError('SPREADSHEET_ID not configured. Set it in .env')
     return spreadsheet_id
 
 
@@ -144,7 +143,6 @@ def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None
     spreadsheet_id = get_spreadsheet_id()
     sheets = get_google_sheets_client()
 
-    # Use ORIGINAL preset for SPREADSHEET_ID_2
     preset = COLUMN_PRESETS['ORIGINAL']
     target_sheet = sheet_name or 'TRI BASE O/U 4'
 
@@ -153,7 +151,7 @@ def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None
     date_col_index = col_to_index(date_col)
 
     print(f"Sorting '{target_sheet}' by column {date_col} ({'descending' if descending else 'ascending'})...")
-    print(f"  Spreadsheet: SPREADSHEET_ID_2")
+    print(f"  Spreadsheet: {spreadsheet_id[:8]}...")
 
     # Get the numeric sheet ID needed for batchUpdate
     sheet_id = get_sheet_id(sheets, spreadsheet_id, target_sheet)

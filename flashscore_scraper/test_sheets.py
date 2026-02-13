@@ -131,8 +131,6 @@ def test_headers(client, spreadsheet_id: str, preset_name: str) -> bool:
 def main():
     spreadsheets = {
         'SPREADSHEET_ID':   os.getenv('SPREADSHEET_ID', ''),
-        'SPREADSHEET_ID_2': os.getenv('SPREADSHEET_ID_2', ''),
-        'SPREADSHEET_ID_3': os.getenv('SPREADSHEET_ID_3', ''),
     }
 
     preset_name = os.getenv('SHEET_PRESET', 'ORIGINAL')

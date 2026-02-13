@@ -16,8 +16,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 class GoogleConfig:
     """Google Sheets configuration"""
     # Your Google Sheet ID (from the URL: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit)
-    # Use SPREADSHEET_ID_2 for original spreadsheet, SPREADSHEET_ID for test/modified version
-    spreadsheet_id: str = field(default_factory=lambda: os.getenv('SPREADSHEET_ID_2') or os.getenv('SPREADSHEET_ID', ''))
+    spreadsheet_id: str = field(default_factory=lambda: os.getenv('SPREADSHEET_ID', ''))
 
     # Path to Google service account credentials JSON file
     # Download from Google Cloud Console > APIs & Services > Credentials

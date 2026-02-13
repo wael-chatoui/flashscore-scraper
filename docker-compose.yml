@@ -4,9 +4,7 @@ services:
     container_name: flashscore-volleyball-scraper
     environment:
       # Google Sheets configuration
-      # SPREADSHEET_ID_2 is the original spreadsheet, SPREADSHEET_ID is the test version
       - SPREADSHEET_ID=${SPREADSHEET_ID}
-      - SPREADSHEET_ID_2=${SPREADSHEET_ID_2}
       - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON}
       - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
 
