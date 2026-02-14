@@ -155,6 +155,37 @@ def _build_original_formulas(sheet_name: str, start_row: int, end_row: int) -> l
         ]
     })
 
+    # Columns AU-BA: MG (Moyenne Générale) — combined averages
+    formula_ranges.append({
+        'range': f"'{sheet_name}'!AU{start_row}:BA{end_row}",
+        'values': [
+            [
+                f'=AVERAGE(L{r};W{r};AI{r})',              # AU: MG BUT (avg total sets)
+                f'=AVERAGE(R{r};AC{r};AO{r})',             # AV: MG SET (avg MOY SET)
+                f'=AVERAGE(S{r};AD{r};AP{r})',             # AW: MG 3 (avg 3-set %)
+                f'=AVERAGE(T{r};AE{r};AQ{r})',             # AX: MG 4 (avg 4-set %)
+                f'=AVERAGE(U{r};AF{r};AR{r})',             # AY: MG 5 (avg 5-set %)
+                f'=AVERAGE(V{r};AG{r};AS{r})',             # AZ: MG 4+ (avg 4+ %)
+                f'=AW{r}+AX{r}',                           # BA: MG 4- (3-set + 4-set %)
+            ]
+            for r in rows
+        ]
+    })
+
+    # Columns BC-BF: Ratios and Filters
+    formula_ranges.append({
+        'range': f"'{sheet_name}'!BC{start_row}:BF{end_row}",
+        'values': [
+            [
+                f'=IF(AY{r}=0;"";AW{r}/AY{r})',            # BC: RATIO U (3-set/5-set)
+                f'=IF(AW{r}=0;"";AY{r}/AW{r})',            # BD: RATIO O (5-set/3-set)
+                f'=IF(AY{r}=0;"";AX{r}/AY{r})',            # BE: Filtre U (4-set/5-set)
+                f'=IF(AW{r}=0;"";AX{r}/AW{r})',            # BF: Filtre 0+ (4-set/3-set)
+            ]
+            for r in rows
+        ]
+    })
+
     return formula_ranges
 
 
@@ -469,4 +500,4 @@ def inject_original_formulas() -> None:
         }
     ).execute()
 
-    print(f'Formulas injected: I, L, P-V, W, AA-AG, AI, AM-AS (rows 2-{last_row})')
+    print(f'Formulas injected: I, L, P-V, W, AA-AG, AI, AM-AS, AU-BA, BC-BF (rows 2-{last_row})')
