@@ -147,7 +147,7 @@ async def main() -> None:
 
         # Sort sheet by date after injection
         print('\n[3/4] Sorting sheet by date...\n')
-        sort_sheet_by_date(descending=True)
+        sort_sheet_by_date()
 
         # Inject formulas AFTER sorting so IF() cell references are stable
         print('\n[4/4] Injecting formulas...\n')
