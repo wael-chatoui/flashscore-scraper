@@ -14,7 +14,7 @@ services:
       - MAX_MATCHES=0
 
       # Sheet configuration
-      # Use 'ORIGINAL' for client's original spreadsheet, 'TRI BASE OU 4' for test version
+      # Use 'ORIGINAL' for client's original spreadsheet, 'SCRAPING OU4' for test version
       - SHEET_PRESET=${SHEET_PRESET:-ORIGINAL}
       - SHEET_TAB_NAME=${SHEET_TAB_NAME:-}
       - START_ROW=${START_ROW:-2}

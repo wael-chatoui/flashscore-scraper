@@ -144,7 +144,7 @@ def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None
     sheets = get_google_sheets_client()
 
     preset = COLUMN_PRESETS['ORIGINAL']
-    target_sheet = sheet_name or 'TRI BASE O/U 4'
+    target_sheet = sheet_name or 'SCRAPING OU4'
 
     # Get date column index from preset (column A)
     date_col = preset['matchInfo']['date']

@@ -103,7 +103,7 @@ docker compose --profile scheduled up -d
 | `GOOGLE_CREDENTIALS_PATH` | Path to credentials.json | `./credentials.json` |
 | `HEADLESS` | Run browser headless | `true` |
 | `MAX_MATCHES` | Limit matches (0=unlimited) | `0` |
-| `SHEET_PRESET` | Column preset | `TRI BASE OU 4` |
+| `SHEET_PRESET` | Column preset | `SCRAPING OU4` |
 | `START_ROW` | Data start row | `2` |
 
 ## Code Patterns

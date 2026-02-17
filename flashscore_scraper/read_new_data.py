@@ -14,7 +14,7 @@ sid = os.environ['SPREADSHEET_ID']
 # Read columns A through H, first 80 rows
 result = sheets.spreadsheets().values().get(
     spreadsheetId=sid,
-    range="'TRI BASE O/U 4'!A1:H80",
+    range="'SCRAPING OU4'!A1:H80",
     majorDimension='ROWS'
 ).execute()
 

@@ -39,7 +39,7 @@ class ScraperConfig:
 @dataclass
 class SheetsConfig:
     """Google Sheets tab and row configuration"""
-    # Column preset: 'ORIGINAL' (client's original), 'TRI BASE OU 4' (test), or 'CALCUL SET' (from CSV)
+    # Column preset: 'ORIGINAL' (client's original), 'SCRAPING OU4' (test), or 'CALCUL SET' (from CSV)
     preset: str = field(default_factory=lambda: os.getenv('SHEET_PRESET', 'ORIGINAL'))
 
     # Sheet tab name (overrides preset default)

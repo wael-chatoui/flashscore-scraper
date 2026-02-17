@@ -15,7 +15,7 @@ from .config import config
 
 # Column mapping - configurable based on actual sheet structure
 #
-# Actual sheet layout for "TRI BASE O/U 4":
+# Actual sheet layout for "SCRAPING OU4":
 # - A: Date
 # - B-H: Formula columns (averages, computed values) - DO NOT OVERWRITE
 # - I: Status/Time (e.g., "Terminé", "20:00")
@@ -39,7 +39,7 @@ COLUMN_PRESETS = {
     # GREEN columns only: A-H (match info), M-O (Team A), X-Z (Team B), AJ-AL (H2H)
     # All other columns contain formulas - DO NOT TOUCH
     'ORIGINAL': {
-        'sheetName': 'TRI BASE O/U 4',
+        'sheetName': 'SCRAPING OU4',
         'matchInfo': {
             'date': 'A', 'time': 'B', 'country': 'C', 'league': 'D',
             'teamA': 'E', 'rankA': 'F', 'teamB': 'G', 'rankB': 'H'
@@ -51,8 +51,8 @@ COLUMN_PRESETS = {
     # Modified spreadsheet structure (Spreadsheet 1 - test/modified version)
     # Sheet columns: A=DATE, I=Status, J=PAYS, K=LEAGUE, L=EQUIPE A, M=Rank A, N=EQUIPE B, O=Rank B
     # Stats: T-V=Team A (3,4,5 sets), AE-AG=Team B (3,4,5 sets), AJ-AL=H2H (3,4,5 sets)
-    'TRI BASE O/U 4': {
-        'sheetName': 'TRI BASE O/U 4',
+    'SCRAPING OU4': {
+        'sheetName': 'SCRAPING OU4',
         'matchInfo': {
             'date': 'A', 'time': 'I', 'country': 'J', 'league': 'K',
             'teamA': 'L', 'rankA': 'M', 'teamB': 'N', 'rankB': 'O'
