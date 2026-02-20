@@ -95,6 +95,14 @@ cat logs/scraper_$(date +%Y-%m-%d).log
 docker compose --profile scheduled up -d
 ```
 
+## Production VPS
+
+- **SSH**: `ssh root@76.13.46.236`
+- **Project path**: `/root/flashscore-scraper`
+- **Runtime**: Docker Compose + ofelia scheduler (daily at 1:00 AM UTC)
+- **Deploy**: `ssh root@76.13.46.236 "cd /root/flashscore-scraper && git pull && docker compose --profile scheduled up -d --build"`
+- **Logs**: `ssh root@76.13.46.236 "cd /root/flashscore-scraper && docker compose logs --tail=50 scraper"`
+
 ## Environment Variables
 
 | Variable | Description | Default |

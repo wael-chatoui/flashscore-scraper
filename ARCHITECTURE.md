@@ -130,3 +130,17 @@ All FlashScore selectors live in the `SELECTORS` dict at the top of `scraper.py`
 - **Systemd timer**: `./scripts/install_cron.sh systemd` (daily at 1:00 AM UTC)
 - **Cron**: `./scripts/install_cron.sh cron`
 - **Docker**: `docker compose up --build` (with optional ofelia scheduler)
+
+### Production VPS
+
+- **Host**: `root@76.13.46.236`
+- **Project path**: `/root/flashscore-scraper`
+- **Branch**: `main`
+- **Runtime**: Docker Compose with ofelia scheduler (`docker compose --profile scheduled up -d`)
+- **Schedule**: Daily at 1:00 AM UTC (scrapes today's matches)
+- **Config files**: `.env` + `credentials.json` (on VPS, not in git)
+
+**Deploy workflow:**
+```bash
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && git pull && docker compose --profile scheduled up -d --build"
+```
