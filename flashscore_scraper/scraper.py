@@ -7,7 +7,8 @@ Scrapes volleyball matches and H2H statistics from FlashScore
 import asyncio
 from datetime import datetime, timedelta
 from typing import TypedDict
-from playwright.async_api import async_playwright, Page, ElementHandle
+
+from playwright.async_api import ElementHandle, Page, async_playwright
 
 from .config import config
 
@@ -20,35 +21,43 @@ VOLLEYBALL_URL = f'{BASE_URL}/volleyball/'
 # Keys prefixed with _class_ are used in JS className.includes() checks.
 SELECTORS: dict[str, dict[str, str]] = {
     'matches': {
-        'container':        '.leagues--live, .event, [class*="sportName"]',
-        'all_items':        '.event__match, [class*="headerLeague"], [class*="divider"]',
-        'title_text':       '.headerLeague__title-text, [class*="title-text"], [class*="titleText"]',
-        'category_text':    '.headerLeague__category-text, [class*="category-text"]',
-        'league_link':      'a.headerLeague__title, a[href*="/volleyball/"]',
-        'home_team':        '.event__participant--home',
-        'away_team':        '.event__participant--away',
-        'match_time':       '.event__stage, .event__time, [class*="stage"]',
-        'match_link':       'a[href*="/match/"]',
+        'container': '.leagues--live, .event, [class*="sportName"]',
+        'all_items': '.event__match, [class*="headerLeague"], [class*="divider"]',
+        'title_text': '.headerLeague__title-text, [class*="title-text"], [class*="titleText"]',
+        'category_text': '.headerLeague__category-text, [class*="category-text"]',
+        'league_link': 'a.headerLeague__title, a[href*="/volleyball/"]',
+        'home_team': '.event__participant--home',
+        'away_team': '.event__participant--away',
+        'match_time': '.event__stage, .event__time, [class*="stage"]',
+        'match_link': 'a[href*="/match/"]',
         # className.includes() patterns used inside JS
-        '_class_header':    'headerLeague',
-        '_class_divider':   'divider',
-        '_class_match':     'event__match',
+        '_class_header': 'headerLeague',
+        '_class_divider': 'divider',
+        '_class_match': 'event__match',
     },
     'navigation': {
-        'next_day':         'button.calendar__navigation--tomorrow, button[data-testid="calendar-next"], [class*="calendar__navigation--next"], .calendar__nav--next',
-        'next_day_alt':     '[aria-label*="suivant"], [aria-label*="next"], button.arrow--next, .calendar__direction--next',
+        'next_day': (
+            'button.calendar__navigation--tomorrow,'
+            ' button[data-testid="calendar-next"],'
+            ' [class*="calendar__navigation--next"],'
+            ' .calendar__nav--next'
+        ),
+        'next_day_alt': (
+            '[aria-label*="suivant"], [aria-label*="next"],'
+            ' button.arrow--next, .calendar__direction--next'
+        ),
     },
     'standings': {
-        'table_row':        '.ui-table__row',
-        'cell_rank':        '.tableCellRank',
-        'cell_team':        '.tableCellParticipant__name',
+        'table_row': '.ui-table__row',
+        'cell_rank': '.tableCellRank',
+        'cell_team': '.tableCellParticipant__name',
     },
     'h2h': {
-        'section':          '.h2h__section',
-        'section_title':    '.h2h__title, .section__title',
-        'row':              '.h2h__row',
-        'result':           '.h2h__result',
-        'show_more_btn':    'button.wclButtonLink--h2h',
+        'section': '.h2h__section',
+        'section_title': '.h2h__title, .section__title',
+        'row': '.h2h__row',
+        'result': '.h2h__result',
+        'show_more_btn': 'button.wclButtonLink--h2h',
     },
 }
 
@@ -162,13 +171,13 @@ async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]
         standings_url = f'{url.rstrip("/")}/classement/'
 
         try:
-
             # Use domcontentloaded with longer wait - more reliable than networkidle
             await page.goto(standings_url, wait_until='domcontentloaded', timeout=30000)
             await page.wait_for_timeout(5000)  # Extra wait for table to render
 
             # Extract standings using the table structure
-            data = await page.evaluate('''(sel) => {
+            data = await page.evaluate(
+                """(sel) => {
                 const rows = document.querySelectorAll(sel.table_row);
                 const standings = [];
 
@@ -187,7 +196,9 @@ async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]
                 });
 
                 return standings;
-            }''', SELECTORS['standings'])
+            }""",
+                SELECTORS['standings'],
+            )
 
             for item in data:
                 # Store with both original lowercase and normalized keys for better matching
@@ -197,7 +208,7 @@ async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]
                 normalized = team_lower
                 for suffix in [' f', ' w', ' (f)', ' (w)', ' femmes', ' women']:
                     if normalized.endswith(suffix):
-                        normalized = normalized[:-len(suffix)]
+                        normalized = normalized[: -len(suffix)]
                         break
                 if normalized != team_lower:
                     rankings[normalized] = item['rank']
@@ -218,7 +229,7 @@ def normalize_team_name(name: str) -> str:
     # Remove common suffixes
     for suffix in [' f', ' w', ' (f)', ' (w)', ' femmes', ' women']:
         if name.endswith(suffix):
-            name = name[:-len(suffix)]
+            name = name[: -len(suffix)]
     return name
 
 
@@ -294,7 +305,8 @@ async def extract_matches_for_date(page: Page, days_offset: int = 1) -> list[Mat
     matches: list[Match] = []
 
     # Use page.evaluate to extract all data at once for better performance and accuracy
-    extracted_data = await page.evaluate('''(sel) => {
+    extracted_data = await page.evaluate(
+        """(sel) => {
         const results = [];
         let currentCountry = '';
         let currentLeague = '';
@@ -305,8 +317,9 @@ async def extract_matches_for_date(page: Page, days_offset: int = 1) -> list[Mat
         const allElements = container.querySelectorAll(sel.all_items);
 
         allElements.forEach(el => {
-            // Check if it's a league header
-            if (el.className.includes(sel._class_header) || el.className.includes(sel._class_divider)) {
+            const isHeader = el.className.includes(sel._class_header);
+            const isDivider = el.className.includes(sel._class_divider);
+            if (isHeader || isDivider) {
                 const titleEl = el.querySelector(sel.title_text);
                 if (titleEl) {
                     const fullTitle = titleEl.textContent?.trim() || '';
@@ -368,7 +381,9 @@ async def extract_matches_for_date(page: Page, days_offset: int = 1) -> list[Mat
         });
 
         return results;
-    }''', SELECTORS['matches'])
+    }""",
+        SELECTORS['matches'],
+    )
 
     # Calculate target date (French format)
     target_date = datetime.now() + timedelta(days=days_offset)
@@ -385,18 +400,20 @@ async def extract_matches_for_date(page: Page, days_offset: int = 1) -> list[Mat
             base_href = base_href.split('?')[0].rstrip('/')
             match_url = f'{base_href}/tete-a-tete/global/'
 
-        matches.append({
-            'date': date_str,
-            'time': data.get('time', ''),
-            'country': data.get('country', ''),
-            'league': data.get('league', ''),
-            'leagueUrl': data.get('leagueUrl', ''),  # Used internally to fetch standings
-            'teamA': data['teamA'],
-            'rankA': '',
-            'teamB': data['teamB'],
-            'rankB': '',
-            'matchUrl': match_url
-        })
+        matches.append(
+            {
+                'date': date_str,
+                'time': data.get('time', ''),
+                'country': data.get('country', ''),
+                'league': data.get('league', ''),
+                'leagueUrl': data.get('leagueUrl', ''),  # Used internally to fetch standings
+                'teamA': data['teamA'],
+                'rankA': '',
+                'teamB': data['teamB'],
+                'rankB': '',
+                'matchUrl': match_url,
+            }
+        )
 
     print(f'Found {len(matches)} matches for {date_str}')
     return matches
@@ -408,7 +425,9 @@ async def extract_today_matches(page: Page) -> list[Match]:
     return await extract_matches_for_date(page, days_offset=0)
 
 
-async def scrape_h2h_stats(page: Page, h2h_url: str, team_a: str = '', team_b: str = '') -> MatchStats:
+async def scrape_h2h_stats(
+    page: Page, h2h_url: str, team_a: str = '', team_b: str = ''
+) -> MatchStats:
     """
     Scrape H2H stats for a specific match.
 
@@ -467,7 +486,7 @@ async def scrape_h2h_stats(page: Page, h2h_url: str, team_a: str = '', team_b: s
         # Fallback: if title matching failed, assign unmatched sections by index
         if not (matched_a and matched_b and matched_h2h):
             unmatched_sections = []
-            for i, section in enumerate(sections):
+            for section in sections:
                 title_el = await section.query_selector(SELECTORS['h2h']['section_title'])
                 title = ''
                 if title_el:
@@ -497,18 +516,10 @@ async def scrape_h2h_stats(page: Page, h2h_url: str, team_a: str = '', team_b: s
                     h2h_stats = stats
                     matched_h2h = True
 
-        return {
-            'teamAStats': team_a_stats,
-            'teamBStats': team_b_stats,
-            'h2hStats': h2h_stats
-        }
+        return {'teamAStats': team_a_stats, 'teamBStats': team_b_stats, 'h2hStats': h2h_stats}
     except Exception as e:
         print(f'Error scraping H2H for {h2h_url}: {e}')
-        return {
-            'teamAStats': default_stats,
-            'teamBStats': default_stats,
-            'h2hStats': default_stats
-        }
+        return {'teamAStats': default_stats, 'teamBStats': default_stats, 'h2hStats': default_stats}
 
 
 async def validate_selectors(page: Page) -> None:
@@ -522,16 +533,14 @@ async def validate_selectors(page: Page) -> None:
         await page.wait_for_timeout(3000)
 
         checks = {
-            'match rows':   SELECTORS['matches']['all_items'],
+            'match rows': SELECTORS['matches']['all_items'],
             'next-day nav': SELECTORS['navigation']['next_day'],
         }
 
         all_ok = True
         for label, selector in checks.items():
             # Use first selector in a comma-separated fallback chain
-            count = await page.evaluate(
-                '(sel) => document.querySelectorAll(sel).length', selector
-            )
+            count = await page.evaluate('(sel) => document.querySelectorAll(sel).length', selector)
             if count == 0:
                 print(f'  [selector-check] WARNING: "{label}" matched 0 elements ({selector})')
                 all_ok = False
@@ -559,7 +568,10 @@ async def scrape_flashscore(days_offset: int = 0) -> list[MatchWithStats]:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
             locale='fr-FR',
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            user_agent=(
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                ' (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            ),
         )
         page = await context.new_page()
 
@@ -568,24 +580,28 @@ async def scrape_flashscore(days_offset: int = 0) -> list[MatchWithStats]:
             await validate_selectors(page)
 
             # Step 1: Get matches for target date (default: tomorrow)
-            print(f"Fetching matches for {target_date.strftime('%d/%m/%Y')}...")
+            print(f'Fetching matches for {target_date.strftime("%d/%m/%Y")}...')
             matches = await extract_matches_for_date(page, days_offset)
             print(f'Found {len(matches)} matches')
 
             # Step 2: Fetch standings for each unique league to get rankings
-            print("Fetching league standings for rankings...")
+            print('Fetching league standings for rankings...')
             league_standings: dict[str, dict[str, int]] = {}
             seen_leagues: set[str] = set()
 
             for match in matches:
                 league_url = match.get('leagueUrl', '')
-                league_key = league_url or f"{match.get('country', '')}_{match.get('league', '')}"
+                league_key = league_url or f'{match.get("country", "")}_{match.get("league", "")}'
 
                 if league_key and league_key not in seen_leagues:
                     seen_leagues.add(league_key)
 
                     if league_url:
-                        full_url = f'{BASE_URL}{league_url}' if not league_url.startswith('http') else league_url
+                        full_url = (
+                            f'{BASE_URL}{league_url}'
+                            if not league_url.startswith('http')
+                            else league_url
+                        )
                         print(f'  Fetching standings for: {match.get("league", league_url)}')
                         standings = await scrape_league_standings(page, full_url)
 
@@ -597,7 +613,7 @@ async def scrape_flashscore(days_offset: int = 0) -> list[MatchWithStats]:
             # Step 3: Apply rankings to matches
             for match in matches:
                 league_url = match.get('leagueUrl', '')
-                league_key = league_url or f"{match.get('country', '')}_{match.get('league', '')}"
+                league_key = league_url or f'{match.get("country", "")}_{match.get("league", "")}'
                 standings = league_standings.get(league_key, {})
                 match['rankA'] = find_team_rank(match['teamA'], standings)
                 match['rankB'] = find_team_rank(match['teamB'], standings)
@@ -608,24 +624,26 @@ async def scrape_flashscore(days_offset: int = 0) -> list[MatchWithStats]:
             matches_to_process = matches[:max_matches] if max_matches > 0 else matches
 
             for i, match in enumerate(matches_to_process):
-                print(f"Processing match {i + 1}/{len(matches_to_process)}: {match['teamA']} vs {match['teamB']}")
+                n = f'{i + 1}/{len(matches_to_process)}'
+                print(f'Processing match {n}: {match["teamA"]} vs {match["teamB"]}')
 
                 # Remove internal leagueUrl field from output
                 match_data = {k: v for k, v in match.items() if k != 'leagueUrl'}
 
                 if match['matchUrl']:
-                    stats = await scrape_h2h_stats(page, match['matchUrl'], match['teamA'], match['teamB'])
-                    results.append({
-                        **match_data,
-                        **stats
-                    })
+                    stats = await scrape_h2h_stats(
+                        page, match['matchUrl'], match['teamA'], match['teamB']
+                    )
+                    results.append({**match_data, **stats})
                 else:
-                    results.append({
-                        **match_data,
-                        'teamAStats': {'count3': 0, 'count4': 0, 'count5': 0},
-                        'teamBStats': {'count3': 0, 'count4': 0, 'count5': 0},
-                        'h2hStats': {'count3': 0, 'count4': 0, 'count5': 0}
-                    })
+                    results.append(
+                        {
+                            **match_data,
+                            'teamAStats': {'count3': 0, 'count4': 0, 'count5': 0},
+                            'teamBStats': {'count3': 0, 'count4': 0, 'count5': 0},
+                            'h2hStats': {'count3': 0, 'count4': 0, 'count5': 0},
+                        }
+                    )
 
                 # Small delay between requests
                 await page.wait_for_timeout(1000)

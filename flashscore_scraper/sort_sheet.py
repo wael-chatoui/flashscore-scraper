@@ -10,8 +10,8 @@ Usage:
 
 import os
 import sys
-from .sheets import get_google_sheets_client, COLUMN_PRESETS
-from .config import config
+
+from .sheets import COLUMN_PRESETS, get_google_sheets_client
 
 
 def get_spreadsheet_id() -> str:
@@ -42,18 +42,22 @@ def col_to_index(col_letter: str) -> int:
     return result - 1
 
 
-
 def normalize_dates(sheets, spreadsheet_id: str, sheet_name: str, date_col: str) -> None:
     """
     Re-write date column with USER_ENTERED so text dates become real date values.
     This ensures SortRange sorts chronologically, not alphabetically.
     Only touches column A (date column), preserves all other columns/formulas.
     """
-    result = sheets.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id,
-        range=f"'{sheet_name}'!{date_col}2:{date_col}",
-        majorDimension='COLUMNS'
-    ).execute()
+    result = (
+        sheets.spreadsheets()
+        .values()
+        .get(
+            spreadsheetId=spreadsheet_id,
+            range=f"'{sheet_name}'!{date_col}2:{date_col}",
+            majorDimension='COLUMNS',
+        )
+        .execute()
+    )
     values = result.get('values', [[]])
     if not values or not values[0]:
         return
@@ -64,19 +68,21 @@ def normalize_dates(sheets, spreadsheet_id: str, sheet_name: str, date_col: str)
         spreadsheetId=spreadsheet_id,
         range=f"'{sheet_name}'!{date_col}2:{date_col}{len(col_values) + 1}",
         valueInputOption='USER_ENTERED',
-        body={'values': [[v] for v in col_values]}
+        body={'values': [[v] for v in col_values]},
     ).execute()
-    print(f"  Normalized {len(col_values)} date values in column {date_col}")
+    print(f'  Normalized {len(col_values)} date values in column {date_col}')
 
 
-def delete_blank_rows(sheets, spreadsheet_id: str, sheet_id: int,
-                      sheet_name: str, date_col: str) -> None:
+def delete_blank_rows(
+    sheets, spreadsheet_id: str, sheet_id: int, sheet_name: str, date_col: str
+) -> None:
     """Delete rows where the date column and all match info columns (A-H) are empty."""
-    result = sheets.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id,
-        range=f"'{sheet_name}'!A2:H",
-        majorDimension='ROWS'
-    ).execute()
+    result = (
+        sheets.spreadsheets()
+        .values()
+        .get(spreadsheetId=spreadsheet_id, range=f"'{sheet_name}'!A2:H", majorDimension='ROWS')
+        .execute()
+    )
     rows = result.get('values', [])
 
     # Find blank row ranges (where A-H are all empty), work bottom-up
@@ -100,29 +106,30 @@ def delete_blank_rows(sheets, spreadsheet_id: str, sheet_id: int,
             i -= 1
 
     if not blank_ranges:
-        print("  No blank rows to delete")
+        print('  No blank rows to delete')
         return
 
     total_deleted = sum(end - start + 1 for start, end in blank_ranges)
-    print(f"  Deleting {total_deleted} blank rows in {len(blank_ranges)} range(s)")
+    print(f'  Deleting {total_deleted} blank rows in {len(blank_ranges)} range(s)')
 
     # Build delete requests (already bottom-up so indices stay valid)
     requests = []
     for start_row, end_row in blank_ranges:
-        requests.append({
-            'deleteDimension': {
-                'range': {
-                    'sheetId': sheet_id,
-                    'dimension': 'ROWS',
-                    'startIndex': start_row - 1,  # 0-indexed
-                    'endIndex': end_row            # exclusive
+        requests.append(
+            {
+                'deleteDimension': {
+                    'range': {
+                        'sheetId': sheet_id,
+                        'dimension': 'ROWS',
+                        'startIndex': start_row - 1,  # 0-indexed
+                        'endIndex': end_row,  # exclusive
+                    }
                 }
             }
-        })
+        )
 
     sheets.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={'requests': requests}
+        spreadsheetId=spreadsheet_id, body={'requests': requests}
     ).execute()
 
 
@@ -150,26 +157,27 @@ def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None
     date_col = preset['matchInfo']['date']
     date_col_index = col_to_index(date_col)
 
-    print(f"Sorting '{target_sheet}' by column {date_col} ({'descending' if descending else 'ascending'})...")
-    print(f"  Spreadsheet: {spreadsheet_id[:8]}...")
+    order = 'descending' if descending else 'ascending'
+    print(f"Sorting '{target_sheet}' by column {date_col} ({order})...")
+    print(f'  Spreadsheet: {spreadsheet_id[:8]}...')
 
     # Get the numeric sheet ID needed for batchUpdate
     sheet_id = get_sheet_id(sheets, spreadsheet_id, target_sheet)
 
     # Step 1: Delete blank rows
-    print("  Cleaning up blank rows...")
+    print('  Cleaning up blank rows...')
     delete_blank_rows(sheets, spreadsheet_id, sheet_id, target_sheet, date_col)
 
     # Step 2: Normalize dates so text dates become real date serial values
-    print("  Normalizing dates for correct sort order...")
+    print('  Normalizing dates for correct sort order...')
     normalize_dates(sheets, spreadsheet_id, target_sheet, date_col)
 
     # Step 3: Get updated sheet dimensions after deletions
-    sheet_meta = sheets.spreadsheets().get(
-        spreadsheetId=spreadsheet_id,
-        ranges=[f"'{target_sheet}'"],
-        includeGridData=False
-    ).execute()
+    sheet_meta = (
+        sheets.spreadsheets()
+        .get(spreadsheetId=spreadsheet_id, ranges=[f"'{target_sheet}'"], includeGridData=False)
+        .execute()
+    )
     grid_props = sheet_meta['sheets'][0]['properties']['gridProperties']
     row_count = grid_props['rowCount']
     col_count = grid_props['columnCount']
@@ -180,25 +188,24 @@ def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None
     sheets.spreadsheets().batchUpdate(
         spreadsheetId=spreadsheet_id,
         body={
-            'requests': [{
-                'sortRange': {
-                    'range': {
-                        'sheetId': sheet_id,
-                        'startRowIndex': 1,  # skip header row
-                        'endRowIndex': row_count,
-                        'startColumnIndex': 0,
-                        'endColumnIndex': col_count
-                    },
-                    'sortSpecs': [{
-                        'dimensionIndex': date_col_index,
-                        'sortOrder': sort_order
-                    }]
+            'requests': [
+                {
+                    'sortRange': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'startRowIndex': 1,  # skip header row
+                            'endRowIndex': row_count,
+                            'startColumnIndex': 0,
+                            'endColumnIndex': col_count,
+                        },
+                        'sortSpecs': [{'dimensionIndex': date_col_index, 'sortOrder': sort_order}],
+                    }
                 }
-            }]
-        }
+            ]
+        },
     ).execute()
 
-    print("Done! Sheet sorted by date (formulas preserved).")
+    print('Done! Sheet sorted by date (formulas preserved).')
 
 
 def main():

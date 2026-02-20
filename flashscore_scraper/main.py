@@ -22,7 +22,7 @@ from typing import Any
 
 from .config import config
 from .scraper import scrape_flashscore
-from .sheets import inject_to_google_sheets, inject_original_formulas
+from .sheets import inject_original_formulas, inject_to_google_sheets
 from .sort_sheet import sort_sheet_by_date
 
 
@@ -36,7 +36,7 @@ def print_summary(match_data: list[dict[str, Any]]) -> None:
     # Group by country/league
     by_league: dict[str, int] = {}
     for m in match_data:
-        key = f"{m.get('country', '')} - {m.get('league', '')}"
+        key = f'{m.get("country", "")} - {m.get("league", "")}'
         by_league[key] = by_league.get(key, 0) + 1
 
     print('\nMatches by league:')
@@ -47,14 +47,17 @@ def print_summary(match_data: list[dict[str, Any]]) -> None:
     if match_data:
         sample = match_data[0]
         print('\nSample match:')
-        print(f"  {sample.get('teamA', '')} vs {sample.get('teamB', '')}")
-        print(f"  Date: {sample.get('date', '')} {sample.get('time', '')}")
+        print(f'  {sample.get("teamA", "")} vs {sample.get("teamB", "")}')
+        print(f'  Date: {sample.get("date", "")} {sample.get("time", "")}')
         team_a_stats = sample.get('teamAStats', {})
         team_b_stats = sample.get('teamBStats', {})
         h2h_stats = sample.get('h2hStats', {})
-        print(f"  Team A sets: 3={team_a_stats.get('count3', 0)}, 4={team_a_stats.get('count4', 0)}, 5={team_a_stats.get('count5', 0)}")
-        print(f"  Team B sets: 3={team_b_stats.get('count3', 0)}, 4={team_b_stats.get('count4', 0)}, 5={team_b_stats.get('count5', 0)}")
-        print(f"  H2H sets: 3={h2h_stats.get('count3', 0)}, 4={h2h_stats.get('count4', 0)}, 5={h2h_stats.get('count5', 0)}")
+        c3, c4, c5 = (team_a_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
+        print(f'  Team A sets: 3={c3}, 4={c4}, 5={c5}')
+        c3, c4, c5 = (team_b_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
+        print(f'  Team B sets: 3={c3}, 4={c4}, 5={c5}')
+        c3, c4, c5 = (h2h_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
+        print(f'  H2H sets: 3={c3}, 4={c4}, 5={c5}')
 
 
 async def main() -> None:
@@ -91,10 +94,12 @@ async def main() -> None:
     print('=' * 50)
     print('FlashScore Volleyball Scraper')
     print('=' * 50)
-    print(f"Run time: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f'Run time: {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}')
     offset_label = 'today' if days_offset == 0 else f'J{days_offset:+d}'
-    print(f"Target date: {target_date.strftime('%d/%m/%Y')} ({offset_label})")
-    mode = 'Scrape only' if scrape_only else 'Sheets only' if sheets_only else 'Full (scrape + sheets)'
+    print(f'Target date: {target_date.strftime("%d/%m/%Y")} ({offset_label})')
+    mode = (
+        'Scrape only' if scrape_only else 'Sheets only' if sheets_only else 'Full (scrape + sheets)'
+    )
     print(f'Mode: {mode}')
     print('=' * 50)
 
@@ -102,7 +107,8 @@ async def main() -> None:
 
     # Step 1: Scrape data (unless sheets-only mode)
     if not sheets_only:
-        print(f"\n[1/4] Scraping FlashScore volleyball matches for {target_date.strftime('%d/%m/%Y')}...\n")
+        date_str = target_date.strftime('%d/%m/%Y')
+        print(f'\n[1/4] Scraping FlashScore volleyball matches for {date_str}...\n')
 
         match_data = await scrape_flashscore(days_offset=days_offset)
 
@@ -113,7 +119,7 @@ async def main() -> None:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(project_root, 'output')
         os.makedirs(output_dir, exist_ok=True)
-        output_file = os.path.join(output_dir, f"matches_{target_date.strftime('%Y-%m-%d')}.json")
+        output_file = os.path.join(output_dir, f'matches_{target_date.strftime("%Y-%m-%d")}.json')
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(match_data, f, indent=2, ensure_ascii=False)
         print(f'Data saved to {output_file}')
@@ -129,7 +135,7 @@ async def main() -> None:
 
         # Load from JSON if sheets-only mode
         if sheets_only and json_file:
-            with open(json_file, 'r', encoding='utf-8') as f:
+            with open(json_file, encoding='utf-8') as f:
                 match_data = json.load(f)
             print(f'Loaded {len(match_data)} matches from {json_file}')
 

@@ -8,9 +8,9 @@ Usage:
     python read_sheet.py --list             # List all sheet tabs
 """
 
+import json
 import os
 import sys
-import json
 from typing import Any
 
 from google.oauth2 import service_account
@@ -26,17 +26,16 @@ def get_google_sheets_client():
 
     if cred_path and os.path.exists(cred_path):
         credentials = service_account.Credentials.from_service_account_file(
-            cred_path,
-            scopes=['https://www.googleapis.com/auth/spreadsheets.readonly']
+            cred_path, scopes=['https://www.googleapis.com/auth/spreadsheets.readonly']
         )
     elif os.getenv('GOOGLE_CREDENTIALS_JSON'):
         cred_info = json.loads(os.getenv('GOOGLE_CREDENTIALS_JSON'))
         credentials = service_account.Credentials.from_service_account_info(
-            cred_info,
-            scopes=['https://www.googleapis.com/auth/spreadsheets.readonly']
+            cred_info, scopes=['https://www.googleapis.com/auth/spreadsheets.readonly']
         )
     else:
         from google.auth import default
+
         credentials, _ = default(scopes=['https://www.googleapis.com/auth/spreadsheets.readonly'])
 
     return build('sheets', 'v4', credentials=credentials)
@@ -50,17 +49,21 @@ def list_sheets(spreadsheet_id: str) -> list[dict]:
     sheet_list = []
     for sheet in result.get('sheets', []):
         props = sheet.get('properties', {})
-        sheet_list.append({
-            'title': props.get('title'),
-            'sheetId': props.get('sheetId'),
-            'index': props.get('index'),
-            'rowCount': props.get('gridProperties', {}).get('rowCount'),
-            'columnCount': props.get('gridProperties', {}).get('columnCount')
-        })
+        sheet_list.append(
+            {
+                'title': props.get('title'),
+                'sheetId': props.get('sheetId'),
+                'index': props.get('index'),
+                'rowCount': props.get('gridProperties', {}).get('rowCount'),
+                'columnCount': props.get('gridProperties', {}).get('columnCount'),
+            }
+        )
     return sheet_list
 
 
-def read_sheet(spreadsheet_id: str, sheet_name: str = None, range_str: str = None) -> dict[str, Any]:
+def read_sheet(
+    spreadsheet_id: str, sheet_name: str = None, range_str: str = None
+) -> dict[str, Any]:
     """Read data from a sheet"""
     sheets = get_google_sheets_client()
 
@@ -70,29 +73,25 @@ def read_sheet(spreadsheet_id: str, sheet_name: str = None, range_str: str = Non
         if sheet_list:
             sheet_name = sheet_list[0]['title']
         else:
-            raise ValueError("No sheets found in spreadsheet")
+            raise ValueError('No sheets found in spreadsheet')
 
-    # Build range
-    if range_str:
-        full_range = f"'{sheet_name}'!{range_str}"
-    else:
-        full_range = f"'{sheet_name}'!A1:BZ100"  # Read first 100 rows, columns A-BZ
+    # Build range (first 100 rows if no range specified)
+    full_range = f"'{sheet_name}'!{range_str}" if range_str else f"'{sheet_name}'!A1:BZ100"
 
-    result = sheets.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id,
-        range=full_range
-    ).execute()
+    result = (
+        sheets.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=full_range).execute()
+    )
 
     return {
         'sheet_name': sheet_name,
         'range': result.get('range'),
-        'values': result.get('values', [])
+        'values': result.get('values', []),
     }
 
 
 def col_letter(index: int) -> str:
     """Convert column index (0-based) to letter (A, B, ..., Z, AA, AB, ...)"""
-    result = ""
+    result = ''
     while index >= 0:
         result = chr(index % 26 + ord('A')) + result
         index = index // 26 - 1
@@ -103,57 +102,57 @@ def print_sheet_structure(data: dict[str, Any], max_rows: int = 20) -> None:
     """Print sheet structure in a readable format"""
     values = data.get('values', [])
 
-    print(f"\n{'='*60}")
-    print(f"Sheet: {data['sheet_name']}")
-    print(f"Range: {data['range']}")
-    print(f"Total rows: {len(values)}")
-    print(f"{'='*60}\n")
+    print(f'\n{"=" * 60}')
+    print(f'Sheet: {data["sheet_name"]}')
+    print(f'Range: {data["range"]}')
+    print(f'Total rows: {len(values)}')
+    print(f'{"=" * 60}\n')
 
     if not values:
-        print("(empty sheet)")
+        print('(empty sheet)')
         return
 
     # Find max columns
     max_cols = max(len(row) for row in values) if values else 0
 
     # Print header row with column letters
-    print("     ", end="")
+    print('     ', end='')
     for col_idx in range(min(max_cols, 50)):  # Limit to 50 columns
-        print(f"{col_letter(col_idx):>12}", end="")
-    print("\n" + "-" * (5 + min(max_cols, 50) * 12))
+        print(f'{col_letter(col_idx):>12}', end='')
+    print('\n' + '-' * (5 + min(max_cols, 50) * 12))
 
     # Print rows
     for row_idx, row in enumerate(values[:max_rows]):
-        print(f"{row_idx + 1:4} |", end="")
+        print(f'{row_idx + 1:4} |', end='')
         for col_idx in range(min(max_cols, 50)):
-            val = row[col_idx] if col_idx < len(row) else ""
+            val = row[col_idx] if col_idx < len(row) else ''
             # Truncate long values
-            val_str = str(val)[:10] if val else ""
-            print(f"{val_str:>12}", end="")
+            val_str = str(val)[:10] if val else ''
+            print(f'{val_str:>12}', end='')
         print()
 
     if len(values) > max_rows:
-        print(f"\n... ({len(values) - max_rows} more rows)")
+        print(f'\n... ({len(values) - max_rows} more rows)')
 
 
 def main():
     if not config.google.spreadsheet_id:
-        print("ERROR: SPREADSHEET_ID not configured!")
-        print("Set it in .env file or as environment variable")
+        print('ERROR: SPREADSHEET_ID not configured!')
+        print('Set it in .env file or as environment variable')
         sys.exit(1)
 
     spreadsheet_id = config.google.spreadsheet_id
     args = sys.argv[1:]
 
-    print(f"Spreadsheet ID: {spreadsheet_id}")
+    print(f'Spreadsheet ID: {spreadsheet_id}')
 
     # List sheets mode
     if '--list' in args:
-        print("\nAvailable sheets:")
-        print("-" * 60)
+        print('\nAvailable sheets:')
+        print('-' * 60)
         for sheet in list_sheets(spreadsheet_id):
-            print(f"  - {sheet['title']}")
-            print(f"      Rows: {sheet['rowCount']}, Columns: {sheet['columnCount']}")
+            print(f'  - {sheet["title"]}')
+            print(f'      Rows: {sheet["rowCount"]}, Columns: {sheet["columnCount"]}')
         return
 
     # Read specific sheet or first sheet

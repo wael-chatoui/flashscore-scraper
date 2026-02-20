@@ -9,17 +9,16 @@ Usage:
 """
 
 import asyncio
+import glob
 import json
 import os
 import sys
-import glob
 from datetime import datetime, timedelta
 
 from .config import config
 from .scraper import scrape_flashscore
-from .sheets import inject_to_google_sheets, inject_original_formulas
+from .sheets import inject_original_formulas, inject_to_google_sheets
 from .sort_sheet import sort_sheet_by_date
-
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'output')
 
@@ -47,9 +46,9 @@ async def scrape_day(days_offset: int) -> list[dict]:
     display_date = target_date.strftime('%d/%m/%Y')
     json_path = os.path.join(OUTPUT_DIR, f'matches_{date_str}.json')
 
-    print(f'\n{"="*50}')
+    print(f'\n{"=" * 50}')
     print(f'Scraping {display_date} (J{days_offset:+d})...')
-    print(f'{"="*50}')
+    print(f'{"=" * 50}')
 
     try:
         match_data = await scrape_flashscore(days_offset=days_offset)
@@ -72,7 +71,7 @@ def load_all_jsons() -> list[dict]:
 
     print(f'\nLoading {len(json_files)} JSON files...')
     for path in json_files:
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, encoding='utf-8') as f:
             data = json.load(f)
         print(f'  {os.path.basename(path)}: {len(data)} matches')
         all_data.extend(data)
@@ -98,9 +97,9 @@ async def main():
         for d in range(from_days, to_days + 1):
             await scrape_day(d)
 
-        print(f'\n{"="*50}')
+        print(f'\n{"=" * 50}')
         print('All days scraped!')
-        print(f'{"="*50}')
+        print(f'{"=" * 50}')
 
         if scrape_only:
             return

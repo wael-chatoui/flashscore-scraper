@@ -3,12 +3,22 @@
 
 import asyncio
 import json
+
 from playwright.async_api import async_playwright
 
 URLS = [
-    ("Tourcoing", "Nice", "https://www.flashscore.fr/match/volleyball/nice-O4MYx0BC/tourcoing-lhL6wFCl/tete-a-tete/global/"),
-    ("Jastrzebski", "Belchatow", "https://www.flashscore.fr/match/volleyball/belchatow-SMCDQxuK/jastrzebski-lWD9RIPD/tete-a-tete/global/"),
+    (
+        'Tourcoing',
+        'Nice',
+        'https://www.flashscore.fr/match/volleyball/nice-O4MYx0BC/tourcoing-lhL6wFCl/tete-a-tete/global/',
+    ),
+    (
+        'Jastrzebski',
+        'Belchatow',
+        'https://www.flashscore.fr/match/volleyball/belchatow-SMCDQxuK/jastrzebski-lWD9RIPD/tete-a-tete/global/',
+    ),
 ]
+
 
 def count_sets(results):
     """Count 3/4/5 set matches from result strings"""
@@ -23,9 +33,12 @@ def count_sets(results):
         else:
             continue
         total = a + b
-        if total == 3: c3 += 1
-        elif total == 4: c4 += 1
-        elif total == 5: c5 += 1
+        if total == 3:
+            c3 += 1
+        elif total == 4:
+            c4 += 1
+        elif total == 5:
+            c5 += 1
     return {'count3': c3, 'count4': c4, 'count5': c5}
 
 
@@ -36,7 +49,7 @@ async def main():
             scraped = json.load(f)
         scraped_map = {}
         for m in scraped:
-            key = f"{m['teamA']} vs {m['teamB']}"
+            key = f'{m["teamA"]} vs {m["teamB"]}'
             scraped_map[key] = m
     except Exception:
         scraped_map = {}
@@ -47,10 +60,10 @@ async def main():
         page = await context.new_page()
 
         for team_a, team_b, url in URLS:
-            label = f"{team_a} vs {team_b}"
-            print(f"\n{'='*60}")
-            print(f"Match: {label}")
-            print(f"{'='*60}")
+            label = f'{team_a} vs {team_b}'
+            print(f'\n{"=" * 60}')
+            print(f'Match: {label}')
+            print(f'{"=" * 60}')
 
             await page.goto(url, wait_until='domcontentloaded', timeout=30000)
             await page.wait_for_timeout(5000)
@@ -88,17 +101,18 @@ async def main():
 
                 stats = count_sets(results)
                 print(f"\n  Section {i}: '{header}'")
-                print(f"    Rows: {len(rows)}, Results parsed: {len(results)}")
-                print(f"    Stats: {stats}")
+                print(f'    Rows: {len(rows)}, Results parsed: {len(results)}')
+                print(f'    Stats: {stats}')
 
             # Compare with scraped JSON
             if label in scraped_map:
                 m = scraped_map[label]
-                print(f"\n  Scraped JSON values:")
-                print(f"    teamAStats ({team_a}): {m['teamAStats']}")
-                print(f"    teamBStats ({team_b}): {m['teamBStats']}")
-                print(f"    h2hStats: {m['h2hStats']}")
+                print('\n  Scraped JSON values:')
+                print(f'    teamAStats ({team_a}): {m["teamAStats"]}')
+                print(f'    teamBStats ({team_b}): {m["teamBStats"]}')
+                print(f'    h2hStats: {m["h2hStats"]}')
 
         await browser.close()
+
 
 asyncio.run(main())
