@@ -159,7 +159,7 @@ All FlashScore selectors live in the `SELECTORS` dict at the top of `scraper.py`
 
 **Output:** JSON files in `/root/flashscore-scraper/output/` (one per day)
 
-**Deploy:**
+**Deploy:** Automatic — pushing to `main` triggers GitHub Actions CI (lint → test → deploy via SSH). Uses `appleboy/ssh-action` with the `VPS_SSH_KEY` repo secret. Manual fallback:
 ```bash
 ssh root@76.13.46.236 "cd /root/flashscore-scraper && git pull && docker compose --profile scheduled up -d --build"
 ```
