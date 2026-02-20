@@ -104,6 +104,16 @@ docker compose --profile scheduled up -d
 
 ### Deploy
 
+Pushing to `main` automatically deploys to the VPS via GitHub Actions (CI must pass first).
+
+```bash
+git push origin main  # triggers: lint → test → deploy
+```
+
+The deploy job uses `appleboy/ssh-action` with the `VPS_SSH_KEY` secret (repo Settings > Secrets).
+
+To deploy manually (bypass CI):
+
 ```bash
 ssh root@76.13.46.236 "cd /root/flashscore-scraper && git pull && docker compose --profile scheduled up -d --build"
 ```
