@@ -133,14 +133,38 @@ All FlashScore selectors live in the `SELECTORS` dict at the top of `scraper.py`
 
 ### Production VPS
 
-- **Host**: `root@76.13.46.236`
-- **Project path**: `/root/flashscore-scraper`
-- **Branch**: `main`
-- **Runtime**: Docker Compose with ofelia scheduler (`docker compose --profile scheduled up -d`)
-- **Schedule**: Daily at 1:00 AM UTC (scrapes today's matches)
-- **Config files**: `.env` + `credentials.json` (on VPS, not in git)
+| Detail | Value |
+|--------|-------|
+| Host | `root@76.13.46.236` (srv1332492) |
+| OS | Ubuntu 24.04.3 LTS |
+| RAM | 3.8 GB |
+| Disk | 48 GB (50% used) |
+| Docker | 29.2.1 + Compose v5.0.2 |
+| Project path | `/root/flashscore-scraper` |
+| Branch | `main` |
+| Schedule | Daily 1:00 AM UTC via ofelia |
 
-**Deploy workflow:**
+**Containers:**
+- `flashscore-volleyball-scraper` — runs the scraper, exits after completion
+- `flashscore-scheduler` — ofelia daemon, triggers scraper container daily
+
+**Config files (on VPS only, not in git):**
+- `.env` — SPREADSHEET_ID, SHEET_PRESET, etc.
+- `credentials.json` — Google service account key
+
+**Docker image:** Based on `mcr.microsoft.com/playwright/python:v1.49.0-noble`
+- Installs package via `pip install .`
+- Installs Chromium via `playwright install chromium`
+- Runs as non-root `scraper` user
+
+**Output:** JSON files in `/root/flashscore-scraper/output/` (one per day)
+
+**Deploy:**
 ```bash
 ssh root@76.13.46.236 "cd /root/flashscore-scraper && git pull && docker compose --profile scheduled up -d --build"
+```
+
+**Logs:**
+```bash
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && docker compose logs --tail=50 scraper"
 ```

@@ -97,11 +97,79 @@ docker compose --profile scheduled up -d
 
 ## Production VPS
 
-- **SSH**: `ssh root@76.13.46.236`
-- **Project path**: `/root/flashscore-scraper`
-- **Runtime**: Docker Compose + ofelia scheduler (daily at 1:00 AM UTC)
-- **Deploy**: `ssh root@76.13.46.236 "cd /root/flashscore-scraper && git pull && docker compose --profile scheduled up -d --build"`
-- **Logs**: `ssh root@76.13.46.236 "cd /root/flashscore-scraper && docker compose logs --tail=50 scraper"`
+**Server**: `root@76.13.46.236` (Ubuntu 24.04, 3.8 GB RAM, Docker 29.2)
+**Project path**: `/root/flashscore-scraper`
+**Runtime**: Docker Compose + ofelia scheduler
+**Schedule**: Daily at 1:00 AM UTC
+
+### Deploy
+
+```bash
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && git pull && docker compose --profile scheduled up -d --build"
+```
+
+### Check status
+
+```bash
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && docker compose --profile scheduled ps"
+```
+
+### View logs
+
+```bash
+# Last 50 lines of scraper output
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && docker compose logs --tail=50 scraper"
+
+# Scheduler logs (ofelia)
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && docker compose logs --tail=20 scheduler"
+
+# Follow logs live
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && docker compose logs -f scraper"
+```
+
+### Run manually (outside schedule)
+
+```bash
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && docker compose run --rm scraper"
+```
+
+### Run with custom date
+
+```bash
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && docker compose run --rm scraper python -m flashscore_scraper --days=-2"
+```
+
+### View scraped output
+
+```bash
+ssh root@76.13.46.236 "ls -lh /root/flashscore-scraper/output/"
+```
+
+### Restart containers
+
+```bash
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && docker compose --profile scheduled restart"
+```
+
+### Stop everything
+
+```bash
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && docker compose --profile scheduled down"
+```
+
+### Rollback to previous version
+
+```bash
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && git log --oneline -5"  # find commit
+ssh root@76.13.46.236 "cd /root/flashscore-scraper && git checkout <commit> && docker compose --profile scheduled up -d --build"
+```
+
+### SSH directly
+
+```bash
+ssh root@76.13.46.236
+cd /root/flashscore-scraper
+```
 
 ## Environment Variables
 
