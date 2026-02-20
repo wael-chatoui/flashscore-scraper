@@ -159,6 +159,12 @@ A `validate_selectors()` function runs at startup and warns if critical selector
 
 ## Guidelines for Claude
 
+### 0. Communication Style
+
+- When uncertain about requirements, ask clarifying questions before implementing.
+- Summarize what you plan to do before making multi-file changes.
+- Keep explanations concise unless asked for detail.
+
 ### 1. Always Commit Your Changes
 
 **IMPORTANT**: After making any code changes, you MUST commit them yourself. Do not wait for the user to ask.
@@ -216,3 +222,5 @@ python -m flashscore_scraper --scrape-only  # Integration test
 - Use try/except for external operations (network, file I/O)
 - Log errors with context (URL, match name, etc.)
 - Return sensible defaults on failure (e.g., `{'count3': 0, 'count4': 0, 'count5': 0}`)
+- When a command or test fails, read the full error output before attempting a fix
+- Do not retry the same approach more than twice without asking for guidance
