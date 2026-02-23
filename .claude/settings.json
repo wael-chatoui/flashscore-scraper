@@ -1,13 +1,18 @@
 {
   "hooks": {
-    "postToolUse": [
+    "PostToolUse": [
       {
         "matcher": "Edit|Write",
-        "command": "ruff format --quiet \"$CLAUDE_FILE_PATH\" 2>/dev/null || true"
-      },
-      {
-        "matcher": "Edit|Write",
-        "command": "ruff check --fix --quiet \"$CLAUDE_FILE_PATH\" 2>/dev/null || true"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ruff format --quiet \"$CLAUDE_FILE_PATH\" 2>/dev/null || true"
+          },
+          {
+            "type": "command",
+            "command": "ruff check --fix --quiet \"$CLAUDE_FILE_PATH\" 2>/dev/null || true"
+          }
+        ]
       }
     ]
   }
