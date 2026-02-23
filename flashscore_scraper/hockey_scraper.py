@@ -41,14 +41,20 @@ HOCKEY_SELECTORS: dict[str, dict[str, str]] = {
     },
     'navigation': {
         'next_day': (
-            'button.calendar__navigation--tomorrow,'
-            ' button[data-testid="calendar-next"],'
-            ' [class*="calendar__navigation--next"],'
-            ' .calendar__nav--next'
+            'button[data-day-picker-arrow="next"],'
+            ' button[aria-label="Jour suivant"],'
+            ' button.calendar__navigation--tomorrow'
         ),
         'next_day_alt': (
-            '[aria-label*="suivant"], [aria-label*="next"],'
-            ' button.arrow--next, .calendar__direction--next'
+            '[aria-label*="suivant"], [aria-label*="next"]'
+        ),
+        'prev_day': (
+            'button[data-day-picker-arrow="prev"],'
+            ' button[aria-label="Jour précédent"],'
+            ' button.calendar__navigation--yesterday'
+        ),
+        'prev_day_alt': (
+            '[aria-label*="précédent"], [aria-label*="prev"]'
         ),
     },
     'standings': {
@@ -98,13 +104,27 @@ class HockeyMatchWithStats(HockeyMatch, HockeyMatchStats):
     pass
 
 
+# ── Cookie consent ────────────────────────────────────────────────────
+
+
+async def accept_cookies(page: Page) -> None:
+    """Dismiss cookie consent banner if present."""
+    try:
+        btn = await page.query_selector('#onetrust-accept-btn-handler')
+        if btn:
+            await btn.click()
+            await page.wait_for_timeout(1000)
+    except Exception:
+        pass
+
+
 # ── Parsing helpers ───────────────────────────────────────────────────
 
 
 def parse_hockey_score(text: str) -> tuple[int | None, int | None]:
     """Parse a hockey score string into (goals_a, goals_b).
 
-    Handles formats: "4:2", "4-2", "4 - 2", "4 : 2".
+    Handles formats: "4:2", "4-2", "4 - 2", "4 : 2", "42" (concatenated).
     Strips OT/SO/AP/TB suffixes (e.g. "4:2 AP", "3-2 SO").
     Returns (None, None) if parsing fails.
     """
@@ -118,7 +138,7 @@ def parse_hockey_score(text: str) -> tuple[int | None, int | None]:
         if text.endswith(suffix):
             text = text[: -len(suffix)].strip()
 
-    # Try colon separator first (most common for hockey)
+    # Try colon or dash separator first (e.g. "4:2", "4-2", "4 - 2")
     for sep in (':', '-'):
         if sep in text:
             parts = text.split(sep, 1)
@@ -127,6 +147,10 @@ def parse_hockey_score(text: str) -> tuple[int | None, int | None]:
                     return int(parts[0].strip()), int(parts[1].strip())
                 except ValueError:
                     continue
+
+    # Concatenated digits format (e.g. "42" = 4-2, common on FlashScore H2H pages)
+    if len(text) == 2 and text.isdigit():
+        return int(text[0]), int(text[1])
 
     return None, None
 
@@ -193,25 +217,33 @@ async def extract_hockey_matches_for_date(
     await page.goto(HOCKEY_URL, wait_until='domcontentloaded', timeout=30000)
     await page.wait_for_timeout(3000)
 
-    # Navigate to the target date
-    if days_offset > 0:
-        print(f'Navigating to J+{days_offset}...')
-        for _ in range(days_offset):
-            next_button = await page.query_selector(
-                HOCKEY_SELECTORS['navigation']['next_day']
-            )
-            if next_button:
-                await next_button.click()
+    # Navigate to the target date (forward or backward)
+    if days_offset != 0:
+        direction = 'forward' if days_offset > 0 else 'backward'
+        print(f'Navigating {direction} {abs(days_offset)} day(s)...')
+        steps = abs(days_offset)
+        for _ in range(steps):
+            if days_offset > 0:
+                btn = await page.query_selector(
+                    HOCKEY_SELECTORS['navigation']['next_day']
+                )
+                if not btn:
+                    btn = await page.query_selector(
+                        HOCKEY_SELECTORS['navigation']['next_day_alt']
+                    )
+            else:
+                btn = await page.query_selector(
+                    HOCKEY_SELECTORS['navigation']['prev_day']
+                )
+                if not btn:
+                    btn = await page.query_selector(
+                        HOCKEY_SELECTORS['navigation']['prev_day_alt']
+                    )
+            if btn:
+                await btn.click(force=True)
                 await page.wait_for_timeout(2000)
             else:
-                next_button = await page.query_selector(
-                    HOCKEY_SELECTORS['navigation']['next_day_alt']
-                )
-                if next_button:
-                    await next_button.click()
-                    await page.wait_for_timeout(2000)
-                else:
-                    print('Warning: Could not find next day navigation button')
+                print('Warning: Could not find date navigation button')
 
     matches: list[HockeyMatch] = []
 
@@ -352,7 +384,10 @@ async def scrape_hockey_h2h_stats(
 
         matched_a = False
         matched_b = False
+        matched_h2h = False
 
+        # Collect section titles
+        section_titles: list[str] = []
         for section in sections:
             title_el = await section.query_selector(
                 HOCKEY_SELECTORS['h2h']['section_title']
@@ -361,10 +396,13 @@ async def scrape_hockey_h2h_stats(
             if title_el:
                 title_text = await title_el.text_content()
                 title = (title_text or '').lower()
+            section_titles.append(title)
 
-            # Skip confrontation directe section
+        # First pass: match by title content
+        for i, (section, title) in enumerate(zip(sections, section_titles)):
             if 'confrontation' in title:
-                continue
+                matched_h2h = True
+                continue  # Skip H2H section for hockey
 
             stats = await count_goals_in_section(section, max_matches=15)
 
@@ -375,28 +413,29 @@ async def scrape_hockey_h2h_stats(
                 team_b_stats = stats
                 matched_b = True
 
-        # Fallback: assign unmatched sections by index (skip confrontation)
+        # Fallback: if title matching failed, assign by standard order
+        # FlashScore H2H layout: section 0 = confrontation, 1 = team A, 2 = team B
         if not (matched_a and matched_b):
             unmatched_sections = []
-            for section in sections:
-                title_el = await section.query_selector(
-                    HOCKEY_SELECTORS['h2h']['section_title']
-                )
-                title = ''
-                if title_el:
-                    title_text = await title_el.text_content()
-                    title = (title_text or '').lower()
-
-                if 'confrontation' in title:
+            for i, (section, title) in enumerate(zip(sections, section_titles)):
+                if matched_h2h and 'confrontation' in title:
                     continue
                 if matched_a and team_a_lower and team_a_lower in title:
                     continue
                 if matched_b and team_b_lower and team_b_lower in title:
                     continue
+                unmatched_sections.append((i, section))
 
-                unmatched_sections.append(section)
+            # When all titles are empty and we have 3 sections,
+            # skip the first (confrontation directe), use 2nd and 3rd
+            if (
+                len(sections) == 3
+                and not matched_h2h
+                and all(t == '' for t in section_titles)
+            ):
+                unmatched_sections = unmatched_sections[1:]  # skip section 0
 
-            for section in unmatched_sections:
+            for _idx, section in unmatched_sections:
                 stats = await count_goals_in_section(section, max_matches=15)
                 if not matched_a:
                     team_a_stats = stats
@@ -419,10 +458,11 @@ async def validate_hockey_selectors(page: Page) -> None:
     try:
         await page.goto(HOCKEY_URL, wait_until='domcontentloaded', timeout=30000)
         await page.wait_for_timeout(3000)
+        await accept_cookies(page)
 
         checks = {
             'match rows': HOCKEY_SELECTORS['matches']['all_items'],
-            'next-day nav': HOCKEY_SELECTORS['navigation']['next_day'],
+            'prev-day nav': HOCKEY_SELECTORS['navigation']['prev_day'],
         }
 
         all_ok = True
@@ -453,7 +493,7 @@ async def scrape_hockey(days_offset: int = 0) -> list[HockeyMatchWithStats]:
     """
     print('Starting FlashScore hockey scraper...')
     target_date = datetime.now() + timedelta(days=days_offset)
-    print(f'Target date: {target_date.strftime("%d/%m/%Y")} (J+{days_offset})')
+    print(f'Target date: {target_date.strftime("%d/%m/%Y")} (J{days_offset:+d})')
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)

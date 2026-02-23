@@ -44,6 +44,16 @@ class TestParseHockeyScore:
     def test_high_scoring(self):
         assert parse_hockey_score('8:5') == (8, 5)
 
+    def test_concatenated_digits(self):
+        """FlashScore H2H pages use concatenated format like '42' for 4-2."""
+        assert parse_hockey_score('42') == (4, 2)
+
+    def test_concatenated_zero(self):
+        assert parse_hockey_score('01') == (0, 1)
+
+    def test_concatenated_high(self):
+        assert parse_hockey_score('63') == (6, 3)
+
 
 class TestGoalCategorization:
     """Test the categorization logic: <=5, =6, >=7 total goals."""
