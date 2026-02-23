@@ -133,7 +133,12 @@ def delete_blank_rows(
     ).execute()
 
 
-def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None:
+def sort_sheet_by_date(
+    descending: bool = False,
+    sheet_name: str = None,
+    preset_name: str = 'ORIGINAL',
+    spreadsheet_id: str = None,
+) -> None:
     """
     Sort Google Sheet by date column using the native Sheets API SortRange request.
     This sorts in-place, preserving all formulas and formatting.
@@ -146,12 +151,14 @@ def sort_sheet_by_date(descending: bool = False, sheet_name: str = None) -> None
     Args:
         descending: Sort newest first if True
         sheet_name: Override sheet name
+        preset_name: Column preset key (default: 'ORIGINAL')
+        spreadsheet_id: Override spreadsheet ID
     """
-    spreadsheet_id = get_spreadsheet_id()
+    spreadsheet_id = spreadsheet_id or get_spreadsheet_id()
     sheets = get_google_sheets_client()
 
-    preset = COLUMN_PRESETS['ORIGINAL']
-    target_sheet = sheet_name or 'SCRAPING OU4'
+    preset = COLUMN_PRESETS.get(preset_name, COLUMN_PRESETS['ORIGINAL'])
+    target_sheet = sheet_name or preset['sheetName']
 
     # Get date column index from preset (column A)
     date_col = preset['matchInfo']['date']

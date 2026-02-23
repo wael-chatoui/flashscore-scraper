@@ -9,6 +9,7 @@ services:
       - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
 
       # Scraper settings
+      - SPORT=${SPORT:-volleyball}
       - HEADLESS=true
       - REQUEST_DELAY=1000
       - MAX_MATCHES=0

@@ -10,11 +10,15 @@ def test_presets_have_required_keys():
 
 
 def test_stats_keys():
-    """Each stats group must define set3, set4, set5."""
+    """Each stats group must define set3, set4, set5 (unless h2h is None)."""
     for name, preset in COLUMN_PRESETS.items():
-        for group in ('teamA', 'teamB', 'h2h'):
+        for group in ('teamA', 'teamB'):
             for key in ('set3', 'set4', 'set5'):
                 assert key in preset[group], f'{name}.{group} missing {key}'
+        # h2h can be None (e.g. hockey preset)
+        if preset['h2h'] is not None:
+            for key in ('set3', 'set4', 'set5'):
+                assert key in preset['h2h'], f'{name}.h2h missing {key}'
 
 
 def test_get_column_preset_returns_dict():
@@ -29,3 +33,14 @@ def test_original_preset_has_match_info():
     assert mi['date'] == 'A'
     assert mi['teamA'] == 'E'
     assert mi['teamB'] == 'G'
+
+
+def test_hockey_preset():
+    preset = COLUMN_PRESETS['HOCKEY UND']
+    assert preset['sheetName'] == 'SCRAPING UND 5.5/6'
+    assert preset['h2h'] is None
+    mi = preset['matchInfo']
+    assert mi['date'] == 'A'
+    assert mi['ecart'] == 'I'
+    assert preset['teamA'] == {'set3': 'P', 'set4': 'Q', 'set5': 'R'}
+    assert preset['teamB'] == {'set3': 'W', 'set4': 'X', 'set5': 'Y'}

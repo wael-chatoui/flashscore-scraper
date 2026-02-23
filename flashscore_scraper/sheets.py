@@ -73,6 +73,26 @@ COLUMN_PRESETS = {
         'teamB': {'set3': 'AE', 'set4': 'AF', 'set5': 'AG'},
         'h2h': {'set3': 'AJ', 'set4': 'AK', 'set5': 'AL'},
     },
+    # Hockey Under 5.5/6 preset
+    # GREEN columns only: A-I (match info), P-R (Team A), W-Y (Team B)
+    # No H2H section — only per-team last-15 stats
+    'HOCKEY UND': {
+        'sheetName': 'SCRAPING UND 5.5/6',
+        'matchInfo': {
+            'date': 'A',
+            'time': 'B',
+            'country': 'C',
+            'league': 'D',
+            'teamA': 'E',
+            'rankA': 'F',
+            'teamB': 'G',
+            'rankB': 'H',
+            'ecart': 'I',
+        },
+        'teamA': {'set3': 'P', 'set4': 'Q', 'set5': 'R'},
+        'teamB': {'set3': 'W', 'set4': 'X', 'set5': 'Y'},
+        'h2h': None,
+    },
     # Alternative mapping based on CSV structure
     'CALCUL SET': {
         'sheetName': 'CALCUL SET',
@@ -327,7 +347,11 @@ def _delete_rows_by_date(sheets, spreadsheet_id: str, sheet_name: str, target_da
     return len(matching_rows)
 
 
-def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2) -> None:
+def inject_to_google_sheets(
+    match_data: list[dict[str, Any]],
+    start_row: int = 2,
+    spreadsheet_id: str | None = None,
+) -> None:
     """
     Inject scraped data into Google Sheets (only GREEN columns).
     Deduplicates by date: if rows for the same date already exist, they are
@@ -336,12 +360,13 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
     Args:
         match_data: Array of match objects from scraper
         start_row: Minimum starting row (default: 2, assuming row 1 has headers)
+        spreadsheet_id: Override spreadsheet ID (e.g. for hockey's separate sheet)
     """
-    if not config.google.spreadsheet_id:
+    spreadsheet_id = spreadsheet_id or config.google.spreadsheet_id
+    if not spreadsheet_id:
         raise ValueError('SPREADSHEET_ID not configured. Set it in .env or environment variable.')
 
     sheets = get_google_sheets_client()
-    spreadsheet_id = config.google.spreadsheet_id
     preset = get_column_preset()
     sheet_name = config.sheets.tab_name or preset['sheetName']
 
@@ -400,9 +425,10 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
         # Check if match info columns are contiguous (ORIGINAL preset: A-H)
         # For ORIGINAL: date=A, time=B, country=C, league=D, teamA=E, rankA=F, teamB=G, rankB=H
         if match_info['time'] == 'B':
-            # ORIGINAL preset - all match info is contiguous A-H
-            match_info_values = [
-                [
+            # Contiguous A-H block (ORIGINAL / HOCKEY UND)
+            row_values = []
+            for m in match_data:
+                row = [
                     m.get('date', ''),
                     m.get('time', ''),
                     m.get('country', ''),
@@ -412,14 +438,23 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
                     m.get('teamB', ''),
                     m.get('rankB', ''),
                 ]
-                for m in match_data
-            ]
+                # Append ecart (rank difference) if the preset has an ecart column
+                if 'ecart' in match_info:
+                    rank_a = m.get('rankA', '')
+                    rank_b = m.get('rankB', '')
+                    try:
+                        ecart = int(rank_a) - int(rank_b) if rank_a and rank_b else ''
+                    except (ValueError, TypeError):
+                        ecart = ''
+                    row.append(ecart)
+                row_values.append(row)
+
             col_from = match_info['date']
-            col_to = match_info['rankB']
+            col_to = match_info.get('ecart', match_info['rankB'])
             value_ranges.append(
                 {
                     'range': f"'{sheet_name}'!{col_from}{start_row}:{col_to}{end_row}",
-                    'values': match_info_values,
+                    'values': row_values,
                 }
             )
         else:
@@ -491,23 +526,24 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
         }
     )
 
-    # H2H stats (0 = no H2H history between teams, keeps formulas working)
-    h2h_values = [
-        [
-            m.get('h2hStats', {}).get('count3', 0),
-            m.get('h2hStats', {}).get('count4', 0),
-            m.get('h2hStats', {}).get('count5', 0),
+    # H2H stats (skip when preset has no h2h, e.g. hockey)
+    if preset.get('h2h'):
+        h2h_values = [
+            [
+                m.get('h2hStats', {}).get('count3', 0),
+                m.get('h2hStats', {}).get('count4', 0),
+                m.get('h2hStats', {}).get('count5', 0),
+            ]
+            for m in match_data
         ]
-        for m in match_data
-    ]
-    col_from = preset['h2h']['set3']
-    col_to = preset['h2h']['set5']
-    value_ranges.append(
-        {
-            'range': f"'{sheet_name}'!{col_from}{start_row}:{col_to}{end_row}",
-            'values': h2h_values,
-        }
-    )
+        col_from = preset['h2h']['set3']
+        col_to = preset['h2h']['set5']
+        value_ranges.append(
+            {
+                'range': f"'{sheet_name}'!{col_from}{start_row}:{col_to}{end_row}",
+                'values': h2h_values,
+            }
+        )
 
     # Batch update all values (won't touch other columns)
     sheets.spreadsheets().values().batchUpdate(
@@ -520,10 +556,12 @@ def inject_to_google_sheets(match_data: list[dict[str, Any]], start_row: int = 2
     if preset.get('matchInfo'):
         mi = preset['matchInfo']
         print(f'  - Date: {mi["date"]}')
-        print(f'  - Match info: {mi["time"]}-{mi["rankB"]} (time, country, league, teams, ranks)')
+        last_col = mi.get('ecart', mi['rankB'])
+        print(f'  - Match info: {mi["time"]}-{last_col} (time, country, league, teams, ranks)')
     print(f'  - Team A stats: {preset["teamA"]["set3"]}-{preset["teamA"]["set5"]}')
     print(f'  - Team B stats: {preset["teamB"]["set3"]}-{preset["teamB"]["set5"]}')
-    print(f'  - H2H stats: {preset["h2h"]["set3"]}-{preset["h2h"]["set5"]}')
+    if preset.get('h2h'):
+        print(f'  - H2H stats: {preset["h2h"]["set3"]}-{preset["h2h"]["set5"]}')
 
 
 def inject_original_formulas() -> None:

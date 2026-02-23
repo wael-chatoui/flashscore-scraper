@@ -16,7 +16,6 @@ import sys
 from datetime import datetime, timedelta
 
 from .config import config
-from .scraper import scrape_flashscore
 from .sheets import inject_original_formulas, inject_to_google_sheets
 from .sort_sheet import sort_sheet_by_date
 
@@ -30,28 +29,40 @@ def parse_args():
     scrape_only = '--scrape-only' in args
     inject_only = '--inject-only' in args
 
+    # Parse --sport=hockey|volleyball
+    sport = config.scraper.sport
     for arg in args:
-        if arg.startswith('--from='):
+        if arg.startswith('--sport='):
+            sport = arg.split('=', 1)[1]
+        elif arg.startswith('--from='):
             from_days = int(arg.split('=', 1)[1])
         elif arg.startswith('--to='):
             to_days = int(arg.split('=', 1)[1])
 
-    return from_days, to_days, scrape_only, inject_only
+    return from_days, to_days, scrape_only, inject_only, sport
 
 
-async def scrape_day(days_offset: int) -> list[dict]:
+async def scrape_day(days_offset: int, sport: str = 'volleyball') -> list[dict]:
     """Scrape a single day and save to JSON. Returns match data."""
     target_date = datetime.now() + timedelta(days=days_offset)
     date_str = target_date.strftime('%Y-%m-%d')
     display_date = target_date.strftime('%d/%m/%Y')
-    json_path = os.path.join(OUTPUT_DIR, f'matches_{date_str}.json')
+    file_prefix = 'hockey_matches' if sport == 'hockey' else 'matches'
+    json_path = os.path.join(OUTPUT_DIR, f'{file_prefix}_{date_str}.json')
 
     print(f'\n{"=" * 50}')
-    print(f'Scraping {display_date} (J{days_offset:+d})...')
+    print(f'Scraping {sport} {display_date} (J{days_offset:+d})...')
     print(f'{"=" * 50}')
 
     try:
-        match_data = await scrape_flashscore(days_offset=days_offset)
+        if sport == 'hockey':
+            from .hockey_scraper import scrape_hockey
+
+            match_data = await scrape_hockey(days_offset=days_offset)
+        else:
+            from .scraper import scrape_flashscore
+
+            match_data = await scrape_flashscore(days_offset=days_offset)
         print(f'  Found {len(match_data)} matches')
 
         with open(json_path, 'w', encoding='utf-8') as f:
@@ -64,10 +75,11 @@ async def scrape_day(days_offset: int) -> list[dict]:
         return []
 
 
-def load_all_jsons() -> list[dict]:
+def load_all_jsons(sport: str = 'volleyball') -> list[dict]:
     """Load all JSON files from output directory."""
     all_data = []
-    json_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, 'matches_*.json')))
+    pattern = 'hockey_matches_*.json' if sport == 'hockey' else 'matches_*.json'
+    json_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, pattern)))
 
     print(f'\nLoading {len(json_files)} JSON files...')
     for path in json_files:
@@ -80,22 +92,23 @@ def load_all_jsons() -> list[dict]:
 
 
 async def main():
-    from_days, to_days, scrape_only, inject_only = parse_args()
+    from_days, to_days, scrape_only, inject_only, sport = parse_args()
+    is_hockey = sport == 'hockey'
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     if not inject_only:
         if from_days is None or to_days is None:
-            print('Usage: python batch_scrape.py --from=-18 --to=1')
+            print('Usage: python batch_scrape.py --from=-18 --to=1 [--sport=hockey]')
             sys.exit(1)
 
         total_days = to_days - from_days + 1
-        print(f'Batch scrape: {total_days} days (J{from_days:+d} to J{to_days:+d})')
+        print(f'Batch scrape ({sport}): {total_days} days (J{from_days:+d} to J{to_days:+d})')
         print(f'Mode: {"scrape only" if scrape_only else "scrape + inject"}')
 
         # Phase 1: Scrape all days to JSON
         for d in range(from_days, to_days + 1):
-            await scrape_day(d)
+            await scrape_day(d, sport)
 
         print(f'\n{"=" * 50}')
         print('All days scraped!')
@@ -105,7 +118,7 @@ async def main():
             return
 
     # Phase 2: Combine and inject
-    all_data = load_all_jsons()
+    all_data = load_all_jsons(sport)
     print(f'\nTotal matches to inject: {len(all_data)}')
 
     if not all_data:
@@ -116,16 +129,21 @@ async def main():
         print('ERROR: SPREADSHEET_ID not configured!')
         sys.exit(1)
 
+    if is_hockey and config.sheets.preset not in ('HOCKEY UND',):
+        config.sheets.preset = 'HOCKEY UND'
+
     print('\nInjecting all data into Google Sheets (single batch)...')
     inject_to_google_sheets(all_data, config.sheets.start_row)
 
+    preset_name = config.sheets.preset or 'ORIGINAL'
     print('\nSorting sheet by date (once)...')
-    sort_sheet_by_date()
+    sort_sheet_by_date(preset_name=preset_name)
 
-    print('\nInjecting formulas (after sort)...')
-    inject_original_formulas()
+    if not is_hockey:
+        print('\nInjecting formulas (after sort)...')
+        inject_original_formulas()
 
-    print(f'\nDone! Injected {len(all_data)} matches total.')
+    print(f'\nDone! Injected {len(all_data)} {sport} matches total.')
 
 
 if __name__ == '__main__':

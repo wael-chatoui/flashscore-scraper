@@ -36,6 +36,9 @@ class GoogleConfig:
 class ScraperConfig:
     """Scraper configuration"""
 
+    # Sport to scrape: 'volleyball' or 'hockey'
+    sport: str = field(default_factory=lambda: os.getenv('SPORT', 'volleyball'))
+
     # Delay between match requests (ms)
     request_delay: int = field(default_factory=lambda: int(os.getenv('REQUEST_DELAY', '1000')))
 

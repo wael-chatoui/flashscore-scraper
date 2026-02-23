@@ -21,12 +21,11 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .config import config
-from .scraper import scrape_flashscore
 from .sheets import inject_original_formulas, inject_to_google_sheets
 from .sort_sheet import sort_sheet_by_date
 
 
-def print_summary(match_data: list[dict[str, Any]]) -> None:
+def print_summary(match_data: list[dict[str, Any]], sport: str = 'volleyball') -> None:
     """Print summary of scraped data"""
     print('\n' + '=' * 50)
     print('SUMMARY')
@@ -51,13 +50,20 @@ def print_summary(match_data: list[dict[str, Any]]) -> None:
         print(f'  Date: {sample.get("date", "")} {sample.get("time", "")}')
         team_a_stats = sample.get('teamAStats', {})
         team_b_stats = sample.get('teamBStats', {})
-        h2h_stats = sample.get('h2hStats', {})
         c3, c4, c5 = (team_a_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
-        print(f'  Team A sets: 3={c3}, 4={c4}, 5={c5}')
+        if sport == 'hockey':
+            print(f'  Team A goals: <=5={c3}, =6={c4}, >=7={c5}')
+        else:
+            print(f'  Team A sets: 3={c3}, 4={c4}, 5={c5}')
         c3, c4, c5 = (team_b_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
-        print(f'  Team B sets: 3={c3}, 4={c4}, 5={c5}')
-        c3, c4, c5 = (h2h_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
-        print(f'  H2H sets: 3={c3}, 4={c4}, 5={c5}')
+        if sport == 'hockey':
+            print(f'  Team B goals: <=5={c3}, =6={c4}, >=7={c5}')
+        else:
+            print(f'  Team B sets: 3={c3}, 4={c4}, 5={c5}')
+        if sport != 'hockey':
+            h2h_stats = sample.get('h2hStats', {})
+            c3, c4, c5 = (h2h_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
+            print(f'  H2H sets: 3={c3}, 4={c4}, 5={c5}')
 
 
 async def main() -> None:
@@ -66,6 +72,14 @@ async def main() -> None:
     scrape_only = '--scrape-only' in args
     sheets_only = '--sheets-only' in args
     scrape_today = '--today' in args
+
+    # Parse --sport=hockey|volleyball argument
+    sport = config.scraper.sport  # default from env/config
+    for arg in args:
+        if arg.startswith('--sport='):
+            sport = arg.split('=', 1)[1]
+            break
+    is_hockey = sport == 'hockey'
 
     # Parse --days=N argument for custom offset
     days_offset = 0  # Default: today (J+0)
@@ -91,8 +105,9 @@ async def main() -> None:
             json_file = arg.split('=', 1)[1]
             break
 
+    sport_label = 'Hockey' if is_hockey else 'Volleyball'
     print('=' * 50)
-    print('FlashScore Volleyball Scraper')
+    print(f'FlashScore {sport_label} Scraper')
     print('=' * 50)
     print(f'Run time: {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}')
     offset_label = 'today' if days_offset == 0 else f'J{days_offset:+d}'
@@ -108,25 +123,34 @@ async def main() -> None:
     # Step 1: Scrape data (unless sheets-only mode)
     if not sheets_only:
         date_str = target_date.strftime('%d/%m/%Y')
-        print(f'\n[1/4] Scraping FlashScore volleyball matches for {date_str}...\n')
+        print(f'\n[1/4] Scraping FlashScore {sport_label.lower()} matches for {date_str}...\n')
 
-        match_data = await scrape_flashscore(days_offset=days_offset)
+        if is_hockey:
+            from .hockey_scraper import scrape_hockey
+
+            match_data = await scrape_hockey(days_offset=days_offset)
+        else:
+            from .scraper import scrape_flashscore
+
+            match_data = await scrape_flashscore(days_offset=days_offset)
 
         print(f'\nScraped {len(match_data)} matches')
 
         # Save to JSON file in output/ at project root
-        # Use target date in filename (the date of the matches, not today)
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(project_root, 'output')
         os.makedirs(output_dir, exist_ok=True)
-        output_file = os.path.join(output_dir, f'matches_{target_date.strftime("%Y-%m-%d")}.json')
+        file_prefix = 'hockey_matches' if is_hockey else 'matches'
+        output_file = os.path.join(
+            output_dir, f'{file_prefix}_{target_date.strftime("%Y-%m-%d")}.json'
+        )
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(match_data, f, indent=2, ensure_ascii=False)
         print(f'Data saved to {output_file}')
 
         if scrape_only:
             print('\n--scrape-only flag set. Skipping Google Sheets injection.')
-            print_summary(match_data)
+            print_summary(match_data, sport)
             return
 
     # Step 2: Inject to Google Sheets (unless scrape-only mode)
@@ -149,17 +173,24 @@ async def main() -> None:
             print('\nYour scraped data has been saved to JSON file.')
             return
 
+        # Hockey uses HOCKEY UND preset by default
+        if is_hockey and config.sheets.preset not in ('HOCKEY UND',):
+            config.sheets.preset = 'HOCKEY UND'
+
         inject_to_google_sheets(match_data, config.sheets.start_row)
 
         # Sort sheet by date after injection
         print('\n[3/4] Sorting sheet by date...\n')
-        sort_sheet_by_date()
+        sort_sheet_by_date(preset_name=config.sheets.preset or 'ORIGINAL')
 
-        # Inject formulas AFTER sorting so IF() cell references are stable
-        print('\n[4/4] Injecting formulas...\n')
-        inject_original_formulas()
+        # Inject formulas AFTER sorting (skip for hockey — client has own formulas)
+        if not is_hockey:
+            print('\n[4/4] Injecting formulas...\n')
+            inject_original_formulas()
+        else:
+            print('\n[4/4] Skipping formula injection (hockey).\n')
 
-    print_summary(match_data)
+    print_summary(match_data, sport)
     print('\nDone!')
 
 
