@@ -16,14 +16,7 @@ from googleapiclient.discovery import build
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 from .sheets import COLUMN_PRESETS  # noqa: E402
-
-
-def col_to_index(col: str) -> int:
-    """Convert column letter (A, B, ..., AZ) to 0-based index."""
-    result = 0
-    for c in col.upper():
-        result = result * 26 + (ord(c) - ord('A') + 1)
-    return result - 1
+from .sort_sheet import col_to_index  # noqa: E402
 
 
 def get_sheets_client():

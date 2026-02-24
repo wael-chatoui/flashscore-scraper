@@ -13,6 +13,7 @@ Usage:
     # Or: python -m flashscore_scraper [args]
 """
 
+import argparse
 import asyncio
 import json
 import os
@@ -23,6 +24,32 @@ from typing import Any
 from .config import config
 from .sheets import inject_original_formulas, inject_to_google_sheets
 from .sort_sheet import sort_sheet_by_date
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser."""
+    parser = argparse.ArgumentParser(
+        prog='flashscore-scraper',
+        description='Scrape volleyball/hockey matches from FlashScore and inject into Sheets.',
+    )
+    parser.add_argument(
+        '--scrape-only', action='store_true', help='Only scrape, save to JSON (skip Sheets)'
+    )
+    parser.add_argument(
+        '--sheets-only', action='store_true', help='Only inject to Sheets from JSON'
+    )
+    parser.add_argument('--today', action='store_true', help="Scrape today's matches (J+0)")
+    parser.add_argument(
+        '--days', type=int, default=0, help='Day offset from today (e.g. -2 for 2 days ago)'
+    )
+    parser.add_argument(
+        '--sport',
+        choices=['volleyball', 'hockey'],
+        default=config.scraper.sport,
+        help='Sport to scrape (default: from SPORT env var)',
+    )
+    parser.add_argument('--json', dest='json_file', help='JSON file to inject (with --sheets-only)')
+    return parser
 
 
 def print_summary(match_data: list[dict[str, Any]], sport: str = 'volleyball') -> None:
@@ -68,42 +95,16 @@ def print_summary(match_data: list[dict[str, Any]], sport: str = 'volleyball') -
 
 async def main() -> None:
     """Main entry point"""
-    args = sys.argv[1:]
-    scrape_only = '--scrape-only' in args
-    sheets_only = '--sheets-only' in args
-    scrape_today = '--today' in args
+    parser = build_parser()
+    args = parser.parse_args()
 
-    # Parse --sport=hockey|volleyball argument
-    sport = config.scraper.sport  # default from env/config
-    for arg in args:
-        if arg.startswith('--sport='):
-            sport = arg.split('=', 1)[1]
-            break
+    scrape_only = args.scrape_only
+    sheets_only = args.sheets_only
+    sport = args.sport
     is_hockey = sport == 'hockey'
-
-    # Parse --days=N argument for custom offset
-    days_offset = 0  # Default: today (J+0)
-    for arg in args:
-        if arg.startswith('--days='):
-            try:
-                days_offset = int(arg.split('=', 1)[1])
-            except ValueError:
-                print(f'Invalid --days value: {arg}')
-                sys.exit(1)
-            break
-
-    # --today is shorthand for --days=0
-    if scrape_today:
-        days_offset = 0
-
+    days_offset = 0 if args.today else args.days
+    json_file = args.json_file
     target_date = datetime.now() + timedelta(days=days_offset)
-
-    # Parse --json=file.json argument
-    json_file = None
-    for arg in args:
-        if arg.startswith('--json='):
-            json_file = arg.split('=', 1)[1]
-            break
 
     sport_label = 'Hockey' if is_hockey else 'Volleyball'
     print('=' * 50)

@@ -8,6 +8,7 @@ Usage:
     python batch_scrape.py --inject-only                   # Inject existing JSONs
 """
 
+import argparse
 import asyncio
 import glob
 import json
@@ -22,24 +23,27 @@ from .sort_sheet import sort_sheet_by_date
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'output')
 
 
-def parse_args():
-    args = sys.argv[1:]
-    from_days = None
-    to_days = None
-    scrape_only = '--scrape-only' in args
-    inject_only = '--inject-only' in args
-
-    # Parse --sport=hockey|volleyball
-    sport = config.scraper.sport
-    for arg in args:
-        if arg.startswith('--sport='):
-            sport = arg.split('=', 1)[1]
-        elif arg.startswith('--from='):
-            from_days = int(arg.split('=', 1)[1])
-        elif arg.startswith('--to='):
-            to_days = int(arg.split('=', 1)[1])
-
-    return from_days, to_days, scrape_only, inject_only, sport
+def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser for batch scraping."""
+    parser = argparse.ArgumentParser(
+        prog='batch-scrape',
+        description='Batch scrape multiple days and inject all data at once.',
+    )
+    parser.add_argument('--from', type=int, dest='from_days', help='Start day offset (e.g. -18)')
+    parser.add_argument('--to', type=int, dest='to_days', help='End day offset (e.g. 1)')
+    parser.add_argument(
+        '--scrape-only', action='store_true', help='Only scrape to JSON (skip Sheets injection)'
+    )
+    parser.add_argument(
+        '--inject-only', action='store_true', help='Only inject existing JSONs to Sheets'
+    )
+    parser.add_argument(
+        '--sport',
+        choices=['volleyball', 'hockey'],
+        default=config.scraper.sport,
+        help='Sport to scrape (default: from SPORT env var)',
+    )
+    return parser
 
 
 async def scrape_day(days_offset: int, sport: str = 'volleyball') -> list[dict]:
@@ -92,15 +96,20 @@ def load_all_jsons(sport: str = 'volleyball') -> list[dict]:
 
 
 async def main():
-    from_days, to_days, scrape_only, inject_only, sport = parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+    from_days = args.from_days
+    to_days = args.to_days
+    scrape_only = args.scrape_only
+    inject_only = args.inject_only
+    sport = args.sport
     is_hockey = sport == 'hockey'
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     if not inject_only:
         if from_days is None or to_days is None:
-            print('Usage: python batch_scrape.py --from=-18 --to=1 [--sport=hockey]')
-            sys.exit(1)
+            parser.error('--from and --to are required when not using --inject-only')
 
         total_days = to_days - from_days + 1
         print(f'Batch scrape ({sport}): {total_days} days (J{from_days:+d} to J{to_days:+d})')

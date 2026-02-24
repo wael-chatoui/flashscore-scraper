@@ -39,9 +39,7 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"flashscore_scraper/test_*.py" = ["E501"]
-"flashscore_scraper/debug_*.py" = ["E501"]
-"flashscore_scraper/read_*.py" = ["E501"]
+"scripts/debug/*.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

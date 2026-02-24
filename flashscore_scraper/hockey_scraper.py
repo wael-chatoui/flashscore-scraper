@@ -16,6 +16,7 @@ from .base_scraper import (
     Match,
     build_selectors,
     click_show_more_buttons,
+    goto_with_retry,
     run_scraper,
 )
 
@@ -29,17 +30,13 @@ HOCKEY_SELECTORS = build_selectors(
             ' button[aria-label="Jour suivant"],'
             ' button.calendar__navigation--tomorrow'
         ),
-        'next_day_alt': (
-            '[aria-label*="suivant"], [aria-label*="next"]'
-        ),
+        'next_day_alt': ('[aria-label*="suivant"], [aria-label*="next"]'),
         'prev_day': (
             'button[data-day-picker-arrow="prev"],'
             ' button[aria-label="Jour précédent"],'
             ' button.calendar__navigation--yesterday'
         ),
-        'prev_day_alt': (
-            '[aria-label*="précédent"], [aria-label*="prev"]'
-        ),
+        'prev_day_alt': ('[aria-label*="précédent"], [aria-label*="prev"]'),
     },
 )
 
@@ -101,9 +98,7 @@ def parse_hockey_score(text: str) -> tuple[int | None, int | None]:
     return None, None
 
 
-async def count_goals_in_section(
-    section: ElementHandle, max_matches: int = 15
-) -> GoalStats:
+async def count_goals_in_section(section: ElementHandle, max_matches: int = 15) -> GoalStats:
     """Count goal distribution from an H2H section.
 
     Categorizes: <=5 goals (count3), =6 goals (count4), >=7 goals (count5).
@@ -157,7 +152,7 @@ async def scrape_hockey_h2h_stats(
     default_stats: GoalStats = {'count3': 0, 'count4': 0, 'count5': 0}
 
     try:
-        await page.goto(h2h_url, wait_until='domcontentloaded', timeout=30000)
+        await goto_with_retry(page, h2h_url)
         await page.wait_for_timeout(3000)
 
         await click_show_more_buttons(page)
@@ -178,9 +173,7 @@ async def scrape_hockey_h2h_stats(
         # Collect section titles
         section_titles: list[str] = []
         for section in sections:
-            title_el = await section.query_selector(
-                HOCKEY_SELECTORS['h2h']['section_title']
-            )
+            title_el = await section.query_selector(HOCKEY_SELECTORS['h2h']['section_title'])
             title = ''
             if title_el:
                 title_text = await title_el.text_content()
@@ -216,11 +209,7 @@ async def scrape_hockey_h2h_stats(
 
             # When all titles are empty and we have 3 sections,
             # skip the first (confrontation directe), use 2nd and 3rd
-            if (
-                len(sections) == 3
-                and not matched_h2h
-                and all(t == '' for t in section_titles)
-            ):
+            if len(sections) == 3 and not matched_h2h and all(t == '' for t in section_titles):
                 unmatched_sections = unmatched_sections[1:]
 
             for _idx, section in unmatched_sections:

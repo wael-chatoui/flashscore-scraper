@@ -5,6 +5,7 @@ Shared infrastructure for all sport scrapers: browser setup, match extraction,
 standings, rankings, date navigation, and the main scraper pipeline.
 """
 
+import asyncio
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any, TypedDict
@@ -12,6 +13,9 @@ from typing import Any, TypedDict
 from playwright.async_api import Page, async_playwright
 
 from .config import config
+
+MAX_RETRIES = 3
+RETRY_DELAY_S = 2
 
 BASE_URL = 'https://www.flashscore.fr'
 
@@ -80,6 +84,24 @@ def build_selectors(
         'h2h': {**_SHARED_SELECTORS['h2h']},
     }
     return selectors
+
+
+# ── Retry helper ────────────────────────────────────────────────────
+
+
+async def goto_with_retry(
+    page: Page, url: str, *, timeout: int = 30000, retries: int = MAX_RETRIES
+) -> None:
+    """Navigate to a URL with retry on failure."""
+    for attempt in range(1, retries + 1):
+        try:
+            await page.goto(url, wait_until='domcontentloaded', timeout=timeout)
+            return
+        except Exception as e:
+            if attempt == retries:
+                raise
+            print(f'  Retry {attempt}/{retries} for {url}: {e}')
+            await asyncio.sleep(RETRY_DELAY_S * attempt)
 
 
 # ── Utilities ────────────────────────────────────────────────────────
@@ -168,7 +190,7 @@ async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]
         standings_url = f'{url.rstrip("/")}/classement/'
 
         try:
-            await page.goto(standings_url, wait_until='domcontentloaded', timeout=30000)
+            await goto_with_retry(page, standings_url)
             await page.wait_for_timeout(5000)
 
             data = await page.evaluate(
@@ -259,7 +281,7 @@ async def extract_matches_for_date(
 
     Returns a list of match dicts including an internal 'leagueUrl' key.
     """
-    await page.goto(sport_url, wait_until='domcontentloaded', timeout=30000)
+    await goto_with_retry(page, sport_url)
     await page.wait_for_timeout(3000)
 
     await navigate_to_date(page, selectors, days_offset)
@@ -370,23 +392,19 @@ async def extract_matches_for_date(
     return matches
 
 
-async def validate_page_selectors(
-    page: Page, sport_url: str, checks: dict[str, str]
-) -> None:
+async def validate_page_selectors(page: Page, sport_url: str, checks: dict[str, str]) -> None:
     """Spot-check critical selectors on a sport page at startup.
 
     Non-blocking: scraping continues regardless of results.
     """
     try:
-        await page.goto(sport_url, wait_until='domcontentloaded', timeout=30000)
+        await goto_with_retry(page, sport_url)
         await page.wait_for_timeout(3000)
         await accept_cookies(page)
 
         all_ok = True
         for label, selector in checks.items():
-            count = await page.evaluate(
-                '(sel) => document.querySelectorAll(sel).length', selector
-            )
+            count = await page.evaluate('(sel) => document.querySelectorAll(sel).length', selector)
             if count == 0:
                 print(f'  [selector-check] WARNING: "{label}" matched 0 elements ({selector})')
                 all_ok = False
@@ -417,9 +435,7 @@ async def fetch_all_standings(
 
             if league_url:
                 full_url = (
-                    f'{BASE_URL}{league_url}'
-                    if not league_url.startswith('http')
-                    else league_url
+                    f'{BASE_URL}{league_url}' if not league_url.startswith('http') else league_url
                 )
                 print(f'  Fetching standings for: {match.get("league", league_url)}')
                 standings = await scrape_league_standings(page, full_url)
@@ -469,7 +485,7 @@ async def run_scraper(
     print(f'Target date: {target_date.strftime("%d/%m/%Y")} (J{days_offset:+d})')
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=config.scraper.headless)
         context = await browser.new_context(
             locale='fr-FR',
             user_agent=(

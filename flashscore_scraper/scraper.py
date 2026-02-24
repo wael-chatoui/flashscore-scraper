@@ -15,6 +15,7 @@ from .base_scraper import (
     Match,
     build_selectors,
     click_show_more_buttons,
+    goto_with_retry,
     run_scraper,
 )
 
@@ -32,6 +33,16 @@ SELECTORS = build_selectors(
         'next_day_alt': (
             '[aria-label*="suivant"], [aria-label*="next"],'
             ' button.arrow--next, .calendar__direction--next'
+        ),
+        'prev_day': (
+            'button.calendar__navigation--yesterday,'
+            ' button[data-testid="calendar-prev"],'
+            ' [class*="calendar__navigation--prev"],'
+            ' .calendar__nav--prev'
+        ),
+        'prev_day_alt': (
+            '[aria-label*="précédent"], [aria-label*="prev"],'
+            ' button.arrow--prev, .calendar__direction--prev'
         ),
     },
 )
@@ -123,7 +134,7 @@ async def scrape_h2h_stats(
     default_stats: SetStats = {'count3': 0, 'count4': 0, 'count5': 0}
 
     try:
-        await page.goto(h2h_url, wait_until='domcontentloaded', timeout=30000)
+        await goto_with_retry(page, h2h_url)
         await page.wait_for_timeout(3000)
 
         await click_show_more_buttons(page)

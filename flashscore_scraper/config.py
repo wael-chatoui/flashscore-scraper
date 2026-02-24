@@ -39,6 +39,11 @@ class ScraperConfig:
     # Sport to scrape: 'volleyball' or 'hockey'
     sport: str = field(default_factory=lambda: os.getenv('SPORT', 'volleyball'))
 
+    # Run browser in headless mode (no visible window)
+    headless: bool = field(
+        default_factory=lambda: os.getenv('HEADLESS', 'true').lower() in ('true', '1', 'yes')
+    )
+
     # Delay between match requests (ms)
     request_delay: int = field(default_factory=lambda: int(os.getenv('REQUEST_DELAY', '1000')))
 
