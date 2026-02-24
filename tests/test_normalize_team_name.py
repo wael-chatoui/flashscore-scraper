@@ -1,4 +1,4 @@
-from flashscore_scraper.scraper import normalize_team_name
+from flashscore_scraper.base_scraper import normalize_team_name
 
 
 def test_lowercase():

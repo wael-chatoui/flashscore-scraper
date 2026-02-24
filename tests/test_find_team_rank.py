@@ -1,4 +1,4 @@
-from flashscore_scraper.scraper import find_team_rank
+from flashscore_scraper.base_scraper import find_team_rank
 
 
 def test_exact_match():
