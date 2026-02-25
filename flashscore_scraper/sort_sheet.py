@@ -9,6 +9,7 @@ Usage:
 """
 
 import os
+import re
 import sys
 
 from .sheets import COLUMN_PRESETS, get_google_sheets_client
@@ -63,14 +64,25 @@ def normalize_dates(sheets, spreadsheet_id: str, sheet_name: str, date_col: str)
         return
 
     col_values = values[0]
+
+    # Sanitize date strings: strip stray quotes and convert 2-digit years
+    cleaned = []
+    for v in col_values:
+        v = str(v).strip().strip('"').strip("'").strip()
+        # Convert DD/MM/YY to DD/MM/YYYY
+        m = re.match(r'^(\d{1,2}/\d{1,2}/)(\d{2})$', v)
+        if m:
+            v = m.group(1) + '20' + m.group(2)
+        cleaned.append(v)
+
     # Write back only the date column with USER_ENTERED to convert text→date
     sheets.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
-        range=f"'{sheet_name}'!{date_col}2:{date_col}{len(col_values) + 1}",
+        range=f"'{sheet_name}'!{date_col}2:{date_col}{len(cleaned) + 1}",
         valueInputOption='USER_ENTERED',
-        body={'values': [[v] for v in col_values]},
+        body={'values': [[v] for v in cleaned]},
     ).execute()
-    print(f'  Normalized {len(col_values)} date values in column {date_col}')
+    print(f'  Normalized {len(cleaned)} date values in column {date_col}')
 
 
 def delete_blank_rows(
