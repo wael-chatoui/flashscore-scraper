@@ -145,6 +145,17 @@ async def scrape_h2h_stats(
 
         sections = await page.query_selector_all(SELECTORS['h2h']['section'])
 
+        if not sections:
+            logger.warning(
+                'H2H page has 0 sections for %s vs %s (%s)',
+                team_a, team_b, h2h_url,
+            )
+            return {
+                'teamAStats': default_stats,
+                'teamBStats': default_stats,
+                'h2hStats': default_stats,
+            }
+
         team_a_stats = default_stats.copy()
         team_b_stats = default_stats.copy()
         h2h_stats = default_stats.copy()
@@ -205,6 +216,13 @@ async def scrape_h2h_stats(
                 elif not matched_h2h:
                     h2h_stats = stats
                     matched_h2h = True
+
+        if not matched_a or not matched_b:
+            logger.warning(
+                'Incomplete H2H matching for %s vs %s: matched_a=%s, matched_b=%s, '
+                'matched_h2h=%s (sections=%d)',
+                team_a, team_b, matched_a, matched_b, matched_h2h, len(sections),
+            )
 
         return {'teamAStats': team_a_stats, 'teamBStats': team_b_stats, 'h2hStats': h2h_stats}
     except Exception as e:

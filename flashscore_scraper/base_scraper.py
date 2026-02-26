@@ -528,11 +528,27 @@ async def run_scraper(
                     stats = await scrape_match_stats(
                         page, match['matchUrl'], match['teamA'], match['teamB']
                     )
+                    # Warn if all returned stats are zero (possible rate-limit)
+                    all_zero = all(
+                        v == 0
+                        for group in stats.values()
+                        if isinstance(group, dict)
+                        for v in group.values()
+                    )
+                    if all_zero:
+                        logger.warning(
+                            'All stats are 0 for match %s: %s vs %s (%s)',
+                            n, match['teamA'], match['teamB'], match['matchUrl'],
+                        )
                     results.append({**match_data, **stats})
                 else:
+                    logger.warning(
+                        'No matchUrl for match %s: %s vs %s — using default stats',
+                        n, match['teamA'], match['teamB'],
+                    )
                     results.append({**match_data, **default_stats})
 
-                await page.wait_for_timeout(1000)
+                await page.wait_for_timeout(config.scraper.request_delay)
 
             return results
         finally:

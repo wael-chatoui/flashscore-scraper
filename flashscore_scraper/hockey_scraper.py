@@ -163,6 +163,25 @@ async def scrape_hockey_h2h_stats(
 
         sections = await page.query_selector_all(HOCKEY_SELECTORS['h2h']['section'])
 
+        # Rate-limit mitigation: if no sections found, wait and retry once
+        if not sections:
+            logger.warning(
+                'H2H page has 0 sections for %s vs %s — retrying in 5s (%s)',
+                team_a, team_b, h2h_url,
+            )
+            await page.wait_for_timeout(5000)
+            await page.reload(wait_until='domcontentloaded')
+            await page.wait_for_timeout(3000)
+            await click_show_more_buttons(page)
+            await page.wait_for_timeout(500)
+            sections = await page.query_selector_all(HOCKEY_SELECTORS['h2h']['section'])
+            if not sections:
+                logger.warning(
+                    'H2H page still has 0 sections after retry for %s vs %s',
+                    team_a, team_b,
+                )
+                return {'teamAStats': default_stats, 'teamBStats': default_stats}
+
         team_a_stats = default_stats.copy()
         team_b_stats = default_stats.copy()
 
@@ -223,6 +242,14 @@ async def scrape_hockey_h2h_stats(
                 elif not matched_b:
                     team_b_stats = stats
                     matched_b = True
+
+        if not matched_a or not matched_b:
+            logger.warning(
+                'Incomplete H2H matching for %s vs %s: matched_a=%s, matched_b=%s '
+                '(sections=%d, titles=%s)',
+                team_a, team_b, matched_a, matched_b,
+                len(sections), section_titles,
+            )
 
         return {'teamAStats': team_a_stats, 'teamBStats': team_b_stats}
     except Exception as e:
