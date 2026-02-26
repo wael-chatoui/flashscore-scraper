@@ -8,10 +8,13 @@ Usage:
     python sort_sheet.py --sheet "Name"     # Sort specific sheet tab
 """
 
+import logging
 import os
 import sys
 
 from .sheets import COLUMN_PRESETS, get_google_sheets_client
+
+logger = logging.getLogger(__name__)
 
 
 def get_spreadsheet_id() -> str:
@@ -70,7 +73,7 @@ def normalize_dates(sheets, spreadsheet_id: str, sheet_name: str, date_col: str)
         valueInputOption='USER_ENTERED',
         body={'values': [[v] for v in col_values]},
     ).execute()
-    print(f'  Normalized {len(col_values)} date values in column {date_col}')
+    logger.info('  Normalized %d date values in column %s', len(col_values), date_col)
 
 
 def delete_blank_rows(
@@ -106,11 +109,11 @@ def delete_blank_rows(
             i -= 1
 
     if not blank_ranges:
-        print('  No blank rows to delete')
+        logger.info('  No blank rows to delete')
         return
 
     total_deleted = sum(end - start + 1 for start, end in blank_ranges)
-    print(f'  Deleting {total_deleted} blank rows in {len(blank_ranges)} range(s)')
+    logger.info('  Deleting %d blank rows in %d range(s)', total_deleted, len(blank_ranges))
 
     # Build delete requests (already bottom-up so indices stay valid)
     requests = []
@@ -165,18 +168,18 @@ def sort_sheet_by_date(
     date_col_index = col_to_index(date_col)
 
     order = 'descending' if descending else 'ascending'
-    print(f"Sorting '{target_sheet}' by column {date_col} ({order})...")
-    print(f'  Spreadsheet: {spreadsheet_id[:8]}...')
+    logger.info("Sorting '%s' by column %s (%s)...", target_sheet, date_col, order)
+    logger.info('  Spreadsheet: %s...', spreadsheet_id[:8])
 
     # Get the numeric sheet ID needed for batchUpdate
     sheet_id = get_sheet_id(sheets, spreadsheet_id, target_sheet)
 
     # Step 1: Delete blank rows
-    print('  Cleaning up blank rows...')
+    logger.info('  Cleaning up blank rows...')
     delete_blank_rows(sheets, spreadsheet_id, sheet_id, target_sheet, date_col)
 
     # Step 2: Normalize dates so text dates become real date serial values
-    print('  Normalizing dates for correct sort order...')
+    logger.info('  Normalizing dates for correct sort order...')
     normalize_dates(sheets, spreadsheet_id, target_sheet, date_col)
 
     # Step 3: Get updated sheet dimensions after deletions
@@ -212,7 +215,7 @@ def sort_sheet_by_date(
         },
     ).execute()
 
-    print('Done! Sheet sorted by date (formulas preserved).')
+    logger.info('Done! Sheet sorted by date (formulas preserved).')
 
 
 def main():

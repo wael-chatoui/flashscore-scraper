@@ -7,6 +7,7 @@ Sport-specific logic only — shared infrastructure lives in base_scraper.
 """
 
 import asyncio
+import logging
 from typing import TypedDict
 
 from playwright.async_api import ElementHandle, Page
@@ -19,6 +20,8 @@ from .base_scraper import (
     goto_with_retry,
     run_scraper,
 )
+
+logger = logging.getLogger(__name__)
 
 HOCKEY_URL = f'{BASE_URL}/hockey/'
 
@@ -223,7 +226,7 @@ async def scrape_hockey_h2h_stats(
 
         return {'teamAStats': team_a_stats, 'teamBStats': team_b_stats}
     except Exception as e:
-        print(f'Error scraping hockey stats for {h2h_url}: {e}')
+        logger.error('Error scraping hockey stats for %s: %s', h2h_url, e)
         return {'teamAStats': default_stats, 'teamBStats': default_stats}
 
 
@@ -257,5 +260,8 @@ async def scrape_hockey(days_offset: int = 0) -> list[HockeyMatchWithStats]:
 
 
 if __name__ == '__main__':
+    from .config import setup_logging
+
+    setup_logging()
     results = asyncio.run(scrape_hockey())
-    print(f'\nScraped {len(results)} hockey matches')
+    logger.info('Scraped %d hockey matches', len(results))

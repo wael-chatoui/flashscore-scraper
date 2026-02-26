@@ -9,6 +9,7 @@ Usage:
 """
 
 import json
+import logging
 import os
 import sys
 from typing import Any
@@ -16,7 +17,9 @@ from typing import Any
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-from .config import config
+from .config import config, setup_logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_google_sheets_client():
@@ -136,9 +139,11 @@ def print_sheet_structure(data: dict[str, Any], max_rows: int = 20) -> None:
 
 
 def main():
+    setup_logging()
+
     if not config.google.spreadsheet_id:
-        print('ERROR: SPREADSHEET_ID not configured!')
-        print('Set it in .env file or as environment variable')
+        logger.error('SPREADSHEET_ID not configured!')
+        logger.error('Set it in .env file or as environment variable')
         sys.exit(1)
 
     spreadsheet_id = config.google.spreadsheet_id

@@ -12,13 +12,16 @@ import argparse
 import asyncio
 import glob
 import json
+import logging
 import os
 import sys
 from datetime import datetime, timedelta
 
-from .config import config
+from .config import config, setup_logging
 from .sheets import inject_original_formulas, inject_to_google_sheets
 from .sort_sheet import sort_sheet_by_date
+
+logger = logging.getLogger(__name__)
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'output')
 
@@ -54,9 +57,9 @@ async def scrape_day(days_offset: int, sport: str = 'volleyball') -> list[dict]:
     file_prefix = 'hockey_matches' if sport == 'hockey' else 'matches'
     json_path = os.path.join(OUTPUT_DIR, f'{file_prefix}_{date_str}.json')
 
-    print(f'\n{"=" * 50}')
-    print(f'Scraping {sport} {display_date} (J{days_offset:+d})...')
-    print(f'{"=" * 50}')
+    logger.info('\n%s', '=' * 50)
+    logger.info('Scraping %s %s (J%+d)...', sport, display_date, days_offset)
+    logger.info('%s', '=' * 50)
 
     try:
         if sport == 'hockey':
@@ -67,15 +70,15 @@ async def scrape_day(days_offset: int, sport: str = 'volleyball') -> list[dict]:
             from .scraper import scrape_flashscore
 
             match_data = await scrape_flashscore(days_offset=days_offset)
-        print(f'  Found {len(match_data)} matches')
+        logger.info('  Found %d matches', len(match_data))
 
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(match_data, f, indent=2, ensure_ascii=False)
-        print(f'  Saved to {json_path}')
+        logger.info('  Saved to %s', json_path)
 
         return match_data
     except Exception as e:
-        print(f'  ERROR scraping {display_date}: {e}')
+        logger.error('ERROR scraping %s: %s', display_date, e)
         return []
 
 
@@ -85,11 +88,11 @@ def load_all_jsons(sport: str = 'volleyball') -> list[dict]:
     pattern = 'hockey_matches_*.json' if sport == 'hockey' else 'matches_*.json'
     json_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, pattern)))
 
-    print(f'\nLoading {len(json_files)} JSON files...')
+    logger.info('Loading %d JSON files...', len(json_files))
     for path in json_files:
         with open(path, encoding='utf-8') as f:
             data = json.load(f)
-        print(f'  {os.path.basename(path)}: {len(data)} matches')
+        logger.debug('  %s: %d matches', os.path.basename(path), len(data))
         all_data.extend(data)
 
     return all_data
@@ -112,55 +115,56 @@ async def main():
             parser.error('--from and --to are required when not using --inject-only')
 
         total_days = to_days - from_days + 1
-        print(f'Batch scrape ({sport}): {total_days} days (J{from_days:+d} to J{to_days:+d})')
-        print(f'Mode: {"scrape only" if scrape_only else "scrape + inject"}')
+        logger.info('Batch scrape (%s): %d days (J%+d to J%+d)', sport, total_days, from_days, to_days)
+        logger.info('Mode: %s', 'scrape only' if scrape_only else 'scrape + inject')
 
         # Phase 1: Scrape all days to JSON
         for d in range(from_days, to_days + 1):
             await scrape_day(d, sport)
 
-        print(f'\n{"=" * 50}')
-        print('All days scraped!')
-        print(f'{"=" * 50}')
+        logger.info('\n%s', '=' * 50)
+        logger.info('All days scraped!')
+        logger.info('%s', '=' * 50)
 
         if scrape_only:
             return
 
     # Phase 2: Combine and inject
     all_data = load_all_jsons(sport)
-    print(f'\nTotal matches to inject: {len(all_data)}')
+    logger.info('Total matches to inject: %d', len(all_data))
 
     if not all_data:
-        print('No data to inject.')
+        logger.info('No data to inject.')
         return
 
     if not config.google.spreadsheet_id:
-        print('ERROR: SPREADSHEET_ID not configured!')
+        logger.error('SPREADSHEET_ID not configured!')
         sys.exit(1)
 
     if is_hockey and config.sheets.preset not in ('HOCKEY UND',):
         config.sheets.preset = 'HOCKEY UND'
 
-    print('\nInjecting all data into Google Sheets (single batch)...')
+    logger.info('Injecting all data into Google Sheets (single batch)...')
     inject_to_google_sheets(all_data, config.sheets.start_row)
 
     preset_name = config.sheets.preset or 'ORIGINAL'
-    print('\nSorting sheet by date (once)...')
+    logger.info('Sorting sheet by date (once)...')
     sort_sheet_by_date(preset_name=preset_name)
 
     if not is_hockey:
-        print('\nInjecting formulas (after sort)...')
+        logger.info('Injecting formulas (after sort)...')
         inject_original_formulas()
 
-    print(f'\nDone! Injected {len(all_data)} {sport} matches total.')
+    logger.info('Done! Injected %d %s matches total.', len(all_data), sport)
 
 
 if __name__ == '__main__':
+    setup_logging()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print('\nInterrupted.')
+        logger.info('Interrupted.')
         sys.exit(1)
     except Exception as err:
-        print(f'Fatal error: {err}')
+        logger.error('Fatal error: %s', err)
         sys.exit(1)

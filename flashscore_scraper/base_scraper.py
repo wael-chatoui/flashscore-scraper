@@ -6,6 +6,7 @@ standings, rankings, date navigation, and the main scraper pipeline.
 """
 
 import asyncio
+import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any, TypedDict
@@ -13,6 +14,8 @@ from typing import Any, TypedDict
 from playwright.async_api import Page, async_playwright
 
 from .config import config
+
+logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_DELAY_S = 2
@@ -100,7 +103,7 @@ async def goto_with_retry(
         except Exception as e:
             if attempt == retries:
                 raise
-            print(f'  Retry {attempt}/{retries} for {url}: {e}')
+            logger.debug('Retry %d/%d for %s: %s', attempt, retries, url, e)
             await asyncio.sleep(RETRY_DELAY_S * attempt)
 
 
@@ -229,7 +232,7 @@ async def scrape_league_standings(page: Page, league_url: str) -> dict[str, int]
                     rankings[normalized] = item['rank']
 
             if rankings:
-                print(f'  Found {len(rankings)} teams in standings')
+                logger.debug('Found %d teams in standings', len(rankings))
                 break
 
         except Exception:
@@ -252,11 +255,11 @@ async def navigate_to_date(
     steps = abs(days_offset)
 
     if days_offset > 0:
-        print(f'Navigating forward {steps} day(s)...')
+        logger.info('Navigating forward %d day(s)...', steps)
         primary_sel = nav['next_day']
         fallback_sel = nav.get('next_day_alt', '')
     else:
-        print(f'Navigating backward {steps} day(s)...')
+        logger.info('Navigating backward %d day(s)...', steps)
         primary_sel = nav.get('prev_day', nav['next_day'])
         fallback_sel = nav.get('prev_day_alt', nav.get('next_day_alt', ''))
 
@@ -268,7 +271,7 @@ async def navigate_to_date(
             await btn.click(force=True)
             await page.wait_for_timeout(2000)
         else:
-            print('Warning: Could not find date navigation button')
+            logger.warning('Could not find date navigation button')
 
 
 async def extract_matches_for_date(
@@ -388,7 +391,7 @@ async def extract_matches_for_date(
             }
         )
 
-    print(f'Found {len(matches)} matches for {date_str}')
+    logger.info('Found %d matches for %s', len(matches), date_str)
     return matches
 
 
@@ -406,13 +409,13 @@ async def validate_page_selectors(page: Page, sport_url: str, checks: dict[str, 
         for label, selector in checks.items():
             count = await page.evaluate('(sel) => document.querySelectorAll(sel).length', selector)
             if count == 0:
-                print(f'  [selector-check] WARNING: "{label}" matched 0 elements ({selector})')
+                logger.warning('[selector-check] "%s" matched 0 elements (%s)', label, selector)
                 all_ok = False
 
         if all_ok:
-            print('  [selector-check] All critical selectors OK')
+            logger.info('[selector-check] All critical selectors OK')
     except Exception as e:
-        print(f'  [selector-check] Could not validate selectors: {e}')
+        logger.warning('[selector-check] Could not validate selectors: %s', e)
 
 
 # ── Orchestration ────────────────────────────────────────────────────
@@ -422,7 +425,7 @@ async def fetch_all_standings(
     page: Page, matches: list[dict[str, Any]]
 ) -> dict[str, dict[str, int]]:
     """Fetch standings for each unique league found in matches."""
-    print('Fetching league standings for rankings...')
+    logger.info('Fetching league standings for rankings...')
     league_standings: dict[str, dict[str, int]] = {}
     seen_leagues: set[str] = set()
 
@@ -437,7 +440,7 @@ async def fetch_all_standings(
                 full_url = (
                     f'{BASE_URL}{league_url}' if not league_url.startswith('http') else league_url
                 )
-                print(f'  Fetching standings for: {match.get("league", league_url)}')
+                logger.debug('Fetching standings for: %s', match.get('league', league_url))
                 standings = await scrape_league_standings(page, full_url)
 
                 if standings:
@@ -480,9 +483,9 @@ async def run_scraper(
         default_stats: Fallback stats for matches without URLs
         validation_checks: {label: selector} for startup checks
     """
-    print(f'Starting FlashScore {sport_name} scraper...')
+    logger.info('Starting FlashScore %s scraper...', sport_name)
     target_date = datetime.now() + timedelta(days=days_offset)
-    print(f'Target date: {target_date.strftime("%d/%m/%Y")} (J{days_offset:+d})')
+    logger.info('Target date: %s (J%+d)', target_date.strftime('%d/%m/%Y'), days_offset)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=config.scraper.headless)
@@ -500,9 +503,9 @@ async def run_scraper(
             await validate_page_selectors(page, sport_url, validation_checks)
 
             # Step 1: Get matches for target date
-            print(f'Fetching {sport_name} matches for {target_date.strftime("%d/%m/%Y")}...')
+            logger.info('Fetching %s matches for %s...', sport_name, target_date.strftime('%d/%m/%Y'))
             matches = await extract_matches_for_date(page, sport_url, selectors, days_offset)
-            print(f'Found {len(matches)} {sport_name} matches')
+            logger.info('Found %d %s matches', len(matches), sport_name)
 
             # Step 2: Fetch standings for each unique league
             league_standings = await fetch_all_standings(page, matches)
@@ -517,7 +520,7 @@ async def run_scraper(
 
             for i, match in enumerate(matches_to_process):
                 n = f'{i + 1}/{len(matches_to_process)}'
-                print(f'Processing match {n}: {match["teamA"]} vs {match["teamB"]}')
+                logger.info('Processing match %s: %s vs %s', n, match['teamA'], match['teamB'])
 
                 match_data = {k: v for k, v in match.items() if k != 'leagueUrl'}
 

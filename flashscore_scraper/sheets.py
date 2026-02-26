@@ -5,6 +5,7 @@ Injects scraped volleyball match data into Google Sheets
 """
 
 import json
+import logging
 import os
 from typing import Any
 
@@ -12,6 +13,8 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 from .config import config
+
+logger = logging.getLogger(__name__)
 
 # Column mapping - configurable based on actual sheet structure
 #
@@ -370,8 +373,8 @@ def inject_to_google_sheets(
     preset = get_column_preset()
     sheet_name = config.sheets.tab_name or preset['sheetName']
 
-    print(f'Injecting {len(match_data)} matches into "{sheet_name}"...')
-    print(f'Using column preset: {config.sheets.preset or "ORIGINAL"}')
+    logger.info('Injecting %d matches into "%s"...', len(match_data), sheet_name)
+    logger.info('Using column preset: %s', config.sheets.preset or 'ORIGINAL')
 
     # Deduplicate: delete existing rows for the same date(s)
     dates_in_batch = {m.get('date', '') for m in match_data if m.get('date')}
@@ -381,13 +384,13 @@ def inject_to_google_sheets(
         total_deleted += deleted
     if total_deleted:
         dates = ', '.join(sorted(dates_in_batch))
-        print(f'Dedup: removed {total_deleted} existing rows for date(s) {dates}')
+        logger.info('Dedup: removed %d existing rows for date(s) %s', total_deleted, dates)
 
     # Find the next empty row to append after existing data
     next_empty = find_next_empty_row(sheets, spreadsheet_id, sheet_name)
     start_row = max(start_row, next_empty)
     end_row = start_row + len(match_data) - 1
-    print(f'Writing to rows {start_row}-{end_row} (appending after existing data)')
+    logger.info('Writing to rows %d-%d (appending after existing data)', start_row, end_row)
 
     # Ensure sheet has enough rows (deleteDimension can shrink the grid)
     meta = (
@@ -414,7 +417,7 @@ def inject_to_google_sheets(
                 ]
             },
         ).execute()
-        print(f'Expanded sheet by {rows_to_add} rows (was {current_rows}, now {end_row})')
+        logger.info('Expanded sheet by %d rows (was %d, now %d)', rows_to_add, current_rows, end_row)
 
     value_ranges = []
 
@@ -551,17 +554,17 @@ def inject_to_google_sheets(
         body={'valueInputOption': 'USER_ENTERED', 'data': value_ranges},
     ).execute()
 
-    print(f'Successfully injected {len(match_data)} matches')
-    print('Columns updated:')
+    logger.info('Successfully injected %d matches', len(match_data))
+    logger.info('Columns updated:')
     if preset.get('matchInfo'):
         mi = preset['matchInfo']
-        print(f'  - Date: {mi["date"]}')
+        logger.info('  - Date: %s', mi['date'])
         last_col = mi.get('ecart', mi['rankB'])
-        print(f'  - Match info: {mi["time"]}-{last_col} (time, country, league, teams, ranks)')
-    print(f'  - Team A stats: {preset["teamA"]["set3"]}-{preset["teamA"]["set5"]}')
-    print(f'  - Team B stats: {preset["teamB"]["set3"]}-{preset["teamB"]["set5"]}')
+        logger.info('  - Match info: %s-%s (time, country, league, teams, ranks)', mi['time'], last_col)
+    logger.info('  - Team A stats: %s-%s', preset['teamA']['set3'], preset['teamA']['set5'])
+    logger.info('  - Team B stats: %s-%s', preset['teamB']['set3'], preset['teamB']['set5'])
     if preset.get('h2h'):
-        print(f'  - H2H stats: {preset["h2h"]["set3"]}-{preset["h2h"]["set5"]}')
+        logger.info('  - H2H stats: %s-%s', preset['h2h']['set3'], preset['h2h']['set5'])
 
 
 def inject_original_formulas() -> None:
@@ -584,10 +587,10 @@ def inject_original_formulas() -> None:
 
     last_row = find_next_empty_row(sheets, spreadsheet_id, sheet_name) - 1
     if last_row < 2:
-        print('No data rows found, skipping formula injection.')
+        logger.info('No data rows found, skipping formula injection.')
         return
 
-    print(f'Injecting formulas for rows 2-{last_row} in "{sheet_name}"...')
+    logger.info('Injecting formulas for rows 2-%d in "%s"...', last_row, sheet_name)
 
     formula_ranges = _build_original_formulas(sheet_name, 2, last_row)
 
@@ -596,4 +599,4 @@ def inject_original_formulas() -> None:
         body={'valueInputOption': 'USER_ENTERED', 'data': formula_ranges},
     ).execute()
 
-    print(f'Formulas injected: I, L, P-V, W, AA-AG, AI, AM-AS, AU-BA, BC-BF (rows 2-{last_row})')
+    logger.info('Formulas injected: I, L, P-V, W, AA-AG, AI, AM-AS, AU-BA, BC-BF (rows 2-%d)', last_row)

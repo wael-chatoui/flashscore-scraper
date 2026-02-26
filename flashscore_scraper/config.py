@@ -4,7 +4,9 @@ Configuration for FlashScore Volleyball Scraper
 Set these values via environment variables or modify directly
 """
 
+import logging
 import os
+import sys
 from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
@@ -72,6 +74,35 @@ class Config:
     google: GoogleConfig = field(default_factory=GoogleConfig)
     scraper: ScraperConfig = field(default_factory=ScraperConfig)
     sheets: SheetsConfig = field(default_factory=SheetsConfig)
+
+
+class _LogFormatter(logging.Formatter):
+    """Custom formatter: show level prefix for WARNING+, plain message for INFO/DEBUG."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        if record.levelno >= logging.WARNING:
+            self._style._fmt = '%(levelname)s: %(message)s'
+        else:
+            self._style._fmt = '%(message)s'
+        return super().format(record)
+
+
+def setup_logging() -> None:
+    """Configure the ``flashscore_scraper`` logger hierarchy.
+
+    Call once from each entry point (cli, batch main, etc.).
+    """
+    root_logger = logging.getLogger('flashscore_scraper')
+    if root_logger.handlers:
+        return  # already configured
+
+    root_logger.setLevel(logging.DEBUG)
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(_LogFormatter())
+
+    root_logger.addHandler(handler)
 
 
 # Global config instance

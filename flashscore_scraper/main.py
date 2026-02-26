@@ -16,14 +16,17 @@ Usage:
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 from datetime import datetime, timedelta
 from typing import Any
 
-from .config import config
+from .config import config, setup_logging
 from .sheets import inject_original_formulas, inject_to_google_sheets
 from .sort_sheet import sort_sheet_by_date
+
+logger = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -107,24 +110,24 @@ async def main() -> None:
     target_date = datetime.now() + timedelta(days=days_offset)
 
     sport_label = 'Hockey' if is_hockey else 'Volleyball'
-    print('=' * 50)
-    print(f'FlashScore {sport_label} Scraper')
-    print('=' * 50)
-    print(f'Run time: {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}')
+    logger.info('=' * 50)
+    logger.info('FlashScore %s Scraper', sport_label)
+    logger.info('=' * 50)
+    logger.info('Run time: %s', datetime.now().strftime('%d/%m/%Y %H:%M:%S'))
     offset_label = 'today' if days_offset == 0 else f'J{days_offset:+d}'
-    print(f'Target date: {target_date.strftime("%d/%m/%Y")} ({offset_label})')
+    logger.info('Target date: %s (%s)', target_date.strftime('%d/%m/%Y'), offset_label)
     mode = (
         'Scrape only' if scrape_only else 'Sheets only' if sheets_only else 'Full (scrape + sheets)'
     )
-    print(f'Mode: {mode}')
-    print('=' * 50)
+    logger.info('Mode: %s', mode)
+    logger.info('=' * 50)
 
     match_data: list[dict[str, Any]] = []
 
     # Step 1: Scrape data (unless sheets-only mode)
     if not sheets_only:
         date_str = target_date.strftime('%d/%m/%Y')
-        print(f'\n[1/4] Scraping FlashScore {sport_label.lower()} matches for {date_str}...\n')
+        logger.info('\n[1/4] Scraping FlashScore %s matches for %s...\n', sport_label.lower(), date_str)
 
         if is_hockey:
             from .hockey_scraper import scrape_hockey
@@ -135,7 +138,7 @@ async def main() -> None:
 
             match_data = await scrape_flashscore(days_offset=days_offset)
 
-        print(f'\nScraped {len(match_data)} matches')
+        logger.info('Scraped %d matches', len(match_data))
 
         # Save to JSON file in output/ at project root
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -147,31 +150,31 @@ async def main() -> None:
         )
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(match_data, f, indent=2, ensure_ascii=False)
-        print(f'Data saved to {output_file}')
+        logger.info('Data saved to %s', output_file)
 
         if scrape_only:
-            print('\n--scrape-only flag set. Skipping Google Sheets injection.')
+            logger.info('--scrape-only flag set. Skipping Google Sheets injection.')
             print_summary(match_data, sport)
             return
 
     # Step 2: Inject to Google Sheets (unless scrape-only mode)
     if not scrape_only:
-        print('\n[2/4] Injecting data into Google Sheets...\n')
+        logger.info('\n[2/4] Injecting data into Google Sheets...\n')
 
         # Load from JSON if sheets-only mode
         if sheets_only and json_file:
             with open(json_file, encoding='utf-8') as f:
                 match_data = json.load(f)
-            print(f'Loaded {len(match_data)} matches from {json_file}')
+            logger.info('Loaded %d matches from %s', len(match_data), json_file)
 
         if not match_data:
-            print('No match data to inject. Run with scrape first or provide --json=file.json')
+            logger.info('No match data to inject. Run with scrape first or provide --json=file.json')
             return
 
         if not config.google.spreadsheet_id:
-            print('ERROR: SPREADSHEET_ID not configured!')
-            print('Please set SPREADSHEET_ID in .env file or environment variable')
-            print('\nYour scraped data has been saved to JSON file.')
+            logger.error('SPREADSHEET_ID not configured!')
+            logger.error('Please set SPREADSHEET_ID in .env file or environment variable')
+            logger.info('Your scraped data has been saved to JSON file.')
             return
 
         # Hockey uses HOCKEY UND preset by default
@@ -181,26 +184,27 @@ async def main() -> None:
         inject_to_google_sheets(match_data, config.sheets.start_row)
 
         # Sort sheet by date after injection
-        print('\n[3/4] Sorting sheet by date...\n')
+        logger.info('\n[3/4] Sorting sheet by date...\n')
         sort_sheet_by_date(preset_name=config.sheets.preset or 'ORIGINAL')
 
         # Inject formulas AFTER sorting (skip for hockey — client has own formulas)
         if not is_hockey:
-            print('\n[4/4] Injecting formulas...\n')
+            logger.info('\n[4/4] Injecting formulas...\n')
             inject_original_formulas()
         else:
-            print('\n[4/4] Skipping formula injection (hockey).\n')
+            logger.info('\n[4/4] Skipping formula injection (hockey).\n')
 
     print_summary(match_data, sport)
-    print('\nDone!')
+    logger.info('Done!')
 
 
 def cli() -> None:
     """Console script entry point for `flashscore-scraper` command."""
+    setup_logging()
     try:
         asyncio.run(main())
     except Exception as err:
-        print(f'Fatal error: {err}')
+        logger.error('Fatal error: %s', err)
         sys.exit(1)
 
 
