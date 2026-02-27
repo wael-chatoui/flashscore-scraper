@@ -54,24 +54,30 @@ def normalize_dates(sheets, spreadsheet_id: str, sheet_name: str, date_col: str)
     result = (
         sheets.spreadsheets()
         .values()
-        .get(
+        .batchGet(
             spreadsheetId=spreadsheet_id,
-            range=f"'{sheet_name}'!{date_col}2:{date_col}",
+            ranges=[f"'{sheet_name}'!{date_col}2:{date_col}"],
             majorDimension='COLUMNS',
         )
         .execute()
     )
-    values = result.get('values', [[]])
+    values = result.get('valueRanges', [{}])[0].get('values', [[]])
     if not values or not values[0]:
         return
 
     col_values = values[0]
     # Write back only the date column with USER_ENTERED to convert text→date
-    sheets.spreadsheets().values().update(
+    sheets.spreadsheets().values().batchUpdate(
         spreadsheetId=spreadsheet_id,
-        range=f"'{sheet_name}'!{date_col}2:{date_col}{len(col_values) + 1}",
-        valueInputOption='USER_ENTERED',
-        body={'values': [[v] for v in col_values]},
+        body={
+            'valueInputOption': 'USER_ENTERED',
+            'data': [
+                {
+                    'range': f"'{sheet_name}'!{date_col}2:{date_col}{len(col_values) + 1}",
+                    'values': [[v] for v in col_values],
+                }
+            ],
+        },
     ).execute()
     logger.info('  Normalized %d date values in column %s', len(col_values), date_col)
 
@@ -83,10 +89,14 @@ def delete_blank_rows(
     result = (
         sheets.spreadsheets()
         .values()
-        .get(spreadsheetId=spreadsheet_id, range=f"'{sheet_name}'!A2:H", majorDimension='ROWS')
+        .batchGet(
+            spreadsheetId=spreadsheet_id,
+            ranges=[f"'{sheet_name}'!A2:H"],
+            majorDimension='ROWS',
+        )
         .execute()
     )
-    rows = result.get('values', [])
+    rows = result.get('valueRanges', [{}])[0].get('values', [])
 
     # Find blank row ranges (where A-H are all empty), work bottom-up
     blank_ranges = []

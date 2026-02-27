@@ -277,14 +277,14 @@ def find_next_empty_row(sheets, spreadsheet_id: str, sheet_name: str, col: str =
     result = (
         sheets.spreadsheets()
         .values()
-        .get(
+        .batchGet(
             spreadsheetId=spreadsheet_id,
-            range=f"'{sheet_name}'!{col}:{col}",
+            ranges=[f"'{sheet_name}'!{col}:{col}"],
             majorDimension='COLUMNS',
         )
         .execute()
     )
-    values = result.get('values', [[]])
+    values = result.get('valueRanges', [{}])[0].get('values', [[]])
     # Length of the column data = last row with content
     return len(values[0]) + 1 if values and values[0] else 2
 
@@ -298,10 +298,14 @@ def _delete_rows_by_date(sheets, spreadsheet_id: str, sheet_name: str, target_da
     result = (
         sheets.spreadsheets()
         .values()
-        .get(spreadsheetId=spreadsheet_id, range=f"'{sheet_name}'!A:A", majorDimension='COLUMNS')
+        .batchGet(
+            spreadsheetId=spreadsheet_id,
+            ranges=[f"'{sheet_name}'!A:A"],
+            majorDimension='COLUMNS',
+        )
         .execute()
     )
-    values = result.get('values', [[]])
+    values = result.get('valueRanges', [{}])[0].get('values', [[]])
     if not values or not values[0]:
         return 0
 
