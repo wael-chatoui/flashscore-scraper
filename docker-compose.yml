@@ -5,6 +5,7 @@ services:
     environment:
       # Google Sheets configuration
       - SPREADSHEET_ID=${SPREADSHEET_ID}
+      - HOCKEY_SPREADSHEET_ID=${HOCKEY_SPREADSHEET_ID:-}
       - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON}
       - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
 
