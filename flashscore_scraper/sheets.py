@@ -107,34 +107,153 @@ COLUMN_PRESETS = {
 }
 
 
-def _build_original_formulas(sheet_name: str, start_row: int, end_row: int) -> list[dict]:
-    """Build formula value_ranges for ORIGINAL preset computed columns.
+# ---------------------------------------------------------------------------
+# Helpers — use numeric sheetId (gridRange) instead of sheet name in ranges.
+# Sheet names with special characters (e.g. '/' in "SCRAPING UND 5.5/6")
+# break the Google Sheets API range parser regardless of quoting.
+# ---------------------------------------------------------------------------
 
+
+def _col_to_index(col_letter: str) -> int:
+    """Convert column letter (A, B, ..., Z, AA, AB, ...) to 0-based index."""
+    result = 0
+    for char in col_letter.upper():
+        result = result * 26 + (ord(char) - ord('A') + 1)
+    return result - 1
+
+
+def _get_sheet_props(sheets, spreadsheet_id: str, sheet_name: str) -> dict:
+    """Get sheet properties by name without using range notation.
+
+    Returns the 'properties' dict: sheetId, title, gridProperties, etc.
+    """
+    meta = sheets.spreadsheets().get(spreadsheetId=spreadsheet_id, includeGridData=False).execute()
+    for sheet in meta.get('sheets', []):
+        props = sheet['properties']
+        if props['title'] == sheet_name:
+            return props
+    raise ValueError(f"Sheet '{sheet_name}' not found")
+
+
+def _read_values(
+    sheets,
+    spreadsheet_id: str,
+    sheet_id: int,
+    start_col: str,
+    end_col: str | None = None,
+    start_row: int | None = None,
+    major_dimension: str = 'COLUMNS',
+) -> list:
+    """Read cell values using sheetId-based gridRange.
+
+    Avoids putting sheet names in API URLs/ranges, which breaks when
+    names contain special characters (e.g. '/' in 'SCRAPING UND 5.5/6').
+    """
+    end_col = end_col or start_col
+    grid_range: dict[str, int] = {
+        'sheetId': sheet_id,
+        'startColumnIndex': _col_to_index(start_col),
+        'endColumnIndex': _col_to_index(end_col) + 1,
+    }
+    if start_row is not None:
+        grid_range['startRowIndex'] = start_row - 1  # 0-based
+
+    result = (
+        sheets.spreadsheets()
+        .values()
+        .batchGetByDataFilter(
+            spreadsheetId=spreadsheet_id,
+            body={
+                'dataFilters': [{'gridRange': grid_range}],
+                'majorDimension': major_dimension,
+            },
+        )
+        .execute()
+    )
+
+    matches = result.get('valueRanges', [])
+    if matches:
+        return matches[0].get('valueRange', {}).get('values', [])
+    return []
+
+
+def _write_values(
+    sheets,
+    spreadsheet_id: str,
+    sheet_id: int,
+    data: list[dict],
+    value_input_option: str = 'USER_ENTERED',
+) -> None:
+    """Write cell values using sheetId-based gridRange.
+
+    Each item in data must have:
+        start_col, end_col: column letters (e.g. 'A', 'H')
+        start_row: 1-indexed row number
+        values: 2D list of values
+    """
+    filter_data = []
+    for d in data:
+        grid_range = {
+            'sheetId': sheet_id,
+            'startColumnIndex': _col_to_index(d['start_col']),
+            'endColumnIndex': _col_to_index(d['end_col']) + 1,
+            'startRowIndex': d['start_row'] - 1,  # 0-based
+        }
+        filter_data.append(
+            {
+                'dataFilter': {'gridRange': grid_range},
+                'values': d['values'],
+                'majorDimension': d.get('major_dimension', 'ROWS'),
+            }
+        )
+
+    sheets.spreadsheets().values().batchUpdateByDataFilter(
+        spreadsheetId=spreadsheet_id,
+        body={
+            'valueInputOption': value_input_option,
+            'data': filter_data,
+        },
+    ).execute()
+
+
+# ---------------------------------------------------------------------------
+
+
+def _build_original_formulas(start_row: int, end_row: int) -> list[dict]:
+    """Build formula data for ORIGINAL preset computed columns.
+
+    Returns dicts with start_col/end_col/start_row/values for _write_values.
     Covers columns I, L, P-V (Team A), W, AA-AG (Team B), AI, AM-AS (H2H).
     """
     rows = range(start_row, end_row + 1)
-    formula_ranges = []
+    formula_data = []
 
     # Column I: ECART (rank difference)
-    formula_ranges.append(
+    formula_data.append(
         {
-            'range': f"'{sheet_name}'!I{start_row}:I{end_row}",
+            'start_col': 'I',
+            'end_col': 'I',
+            'start_row': start_row,
             'values': [[f'=F{r}-H{r}'] for r in rows],
         }
     )
 
     # Column L: N;TOTAL SET A
-    formula_ranges.append(
+    formula_data.append(
         {
-            'range': f"'{sheet_name}'!L{start_row}:L{end_row}",
+            'start_col': 'L',
+            'end_col': 'L',
+            'start_row': start_row,
             'values': [[f'=M{r}*3+N{r}*4+O{r}*5'] for r in rows],
         }
     )
 
     # Columns P-V: Team A derived stats
-    formula_ranges.append(
+    formula_data.append(
         {
-            'range': f"'{sheet_name}'!P{start_row}:V{end_row}",
+            'start_col': 'P',
+            'end_col': 'V',
+            'start_row': start_row,
             'values': [
                 [
                     f'=N{r}+O{r}',  # P: 4+
@@ -151,17 +270,21 @@ def _build_original_formulas(sheet_name: str, start_row: int, end_row: int) -> l
     )
 
     # Column W: N;TOTAL SET B
-    formula_ranges.append(
+    formula_data.append(
         {
-            'range': f"'{sheet_name}'!W{start_row}:W{end_row}",
+            'start_col': 'W',
+            'end_col': 'W',
+            'start_row': start_row,
             'values': [[f'=X{r}*3+Y{r}*4+Z{r}*5'] for r in rows],
         }
     )
 
     # Columns AA-AG: Team B derived stats
-    formula_ranges.append(
+    formula_data.append(
         {
-            'range': f"'{sheet_name}'!AA{start_row}:AG{end_row}",
+            'start_col': 'AA',
+            'end_col': 'AG',
+            'start_row': start_row,
             'values': [
                 [
                     f'=Y{r}+Z{r}',  # AA: 4+
@@ -178,17 +301,21 @@ def _build_original_formulas(sheet_name: str, start_row: int, end_row: int) -> l
     )
 
     # Column AI: H2H N.TOTAL SET
-    formula_ranges.append(
+    formula_data.append(
         {
-            'range': f"'{sheet_name}'!AI{start_row}:AI{end_row}",
+            'start_col': 'AI',
+            'end_col': 'AI',
+            'start_row': start_row,
             'values': [[f'=AJ{r}*3+AK{r}*4+AL{r}*5'] for r in rows],
         }
     )
 
     # Columns AM-AS: H2H derived stats
-    formula_ranges.append(
+    formula_data.append(
         {
-            'range': f"'{sheet_name}'!AM{start_row}:AS{end_row}",
+            'start_col': 'AM',
+            'end_col': 'AS',
+            'start_row': start_row,
             'values': [
                 [
                     f'=AK{r}+AL{r}',  # AM: 4+
@@ -205,18 +332,20 @@ def _build_original_formulas(sheet_name: str, start_row: int, end_row: int) -> l
     )
 
     # Columns AU-BA: MG (Moyenne Générale) — combined averages
-    formula_ranges.append(
+    formula_data.append(
         {
-            'range': f"'{sheet_name}'!AU{start_row}:BA{end_row}",
+            'start_col': 'AU',
+            'end_col': 'BA',
+            'start_row': start_row,
             'values': [
                 [
-                    f'=AVERAGE(L{r};W{r};AI{r})',  # AU: MG BUT (avg total sets)
-                    f'=AVERAGE(R{r};AC{r};AO{r})',  # AV: MG SET (avg MOY SET)
-                    f'=AVERAGE(S{r};AD{r};AP{r})',  # AW: MG 3 (avg 3-set %)
-                    f'=AVERAGE(T{r};AE{r};AQ{r})',  # AX: MG 4 (avg 4-set %)
-                    f'=AVERAGE(U{r};AF{r};AR{r})',  # AY: MG 5 (avg 5-set %)
-                    f'=AVERAGE(V{r};AG{r};AS{r})',  # AZ: MG 4+ (avg 4+ %)
-                    f'=AW{r}+AX{r}',  # BA: MG 4- (3-set + 4-set %)
+                    f'=AVERAGE(L{r};W{r};AI{r})',  # AU: MG BUT
+                    f'=AVERAGE(R{r};AC{r};AO{r})',  # AV: MG SET
+                    f'=AVERAGE(S{r};AD{r};AP{r})',  # AW: MG 3
+                    f'=AVERAGE(T{r};AE{r};AQ{r})',  # AX: MG 4
+                    f'=AVERAGE(U{r};AF{r};AR{r})',  # AY: MG 5
+                    f'=AVERAGE(V{r};AG{r};AS{r})',  # AZ: MG 4+
+                    f'=AW{r}+AX{r}',  # BA: MG 4-
                 ]
                 for r in rows
             ],
@@ -224,22 +353,24 @@ def _build_original_formulas(sheet_name: str, start_row: int, end_row: int) -> l
     )
 
     # Columns BC-BF: Ratios and Filters
-    formula_ranges.append(
+    formula_data.append(
         {
-            'range': f"'{sheet_name}'!BC{start_row}:BF{end_row}",
+            'start_col': 'BC',
+            'end_col': 'BF',
+            'start_row': start_row,
             'values': [
                 [
-                    f'=IF(AY{r}=0;"";AW{r}/AY{r})',  # BC: RATIO U (3-set/5-set)
-                    f'=IF(AW{r}=0;"";AY{r}/AW{r})',  # BD: RATIO O (5-set/3-set)
-                    f'=IF(AY{r}=0;"";AX{r}/AY{r})',  # BE: Filtre U (4-set/5-set)
-                    f'=IF(AW{r}=0;"";AX{r}/AW{r})',  # BF: Filtre 0+ (4-set/3-set)
+                    f'=IF(AY{r}=0;"";AW{r}/AY{r})',  # BC: RATIO U
+                    f'=IF(AW{r}=0;"";AY{r}/AW{r})',  # BD: RATIO O
+                    f'=IF(AY{r}=0;"";AX{r}/AY{r})',  # BE: Filtre U
+                    f'=IF(AW{r}=0;"";AX{r}/AW{r})',  # BF: Filtre 0+
                 ]
                 for r in rows
             ],
         }
     )
 
-    return formula_ranges
+    return formula_data
 
 
 def get_column_preset() -> dict:
@@ -272,40 +403,20 @@ def get_google_sheets_client():
     return build('sheets', 'v4', credentials=credentials)
 
 
-def find_next_empty_row(sheets, spreadsheet_id: str, sheet_name: str, col: str = 'A') -> int:
+def find_next_empty_row(sheets, spreadsheet_id: str, sheet_id: int, col: str = 'A') -> int:
     """Find the first empty row in the given column (1-indexed)."""
-    result = (
-        sheets.spreadsheets()
-        .values()
-        .batchGet(
-            spreadsheetId=spreadsheet_id,
-            ranges=[f"'{sheet_name}'!{col}:{col}"],
-            majorDimension='COLUMNS',
-        )
-        .execute()
-    )
-    values = result.get('valueRanges', [{}])[0].get('values', [[]])
+    values = _read_values(sheets, spreadsheet_id, sheet_id, col, major_dimension='COLUMNS')
     # Length of the column data = last row with content
     return len(values[0]) + 1 if values and values[0] else 2
 
 
-def _delete_rows_by_date(sheets, spreadsheet_id: str, sheet_name: str, target_date: str) -> int:
+def _delete_rows_by_date(sheets, spreadsheet_id: str, sheet_id: int, target_date: str) -> int:
     """Delete all rows where column A matches target_date.
 
     Works bottom-up so that row indices stay valid during deletion.
     Returns the number of deleted rows.
     """
-    result = (
-        sheets.spreadsheets()
-        .values()
-        .batchGet(
-            spreadsheetId=spreadsheet_id,
-            ranges=[f"'{sheet_name}'!A:A"],
-            majorDimension='COLUMNS',
-        )
-        .execute()
-    )
-    values = result.get('valueRanges', [{}])[0].get('values', [[]])
+    values = _read_values(sheets, spreadsheet_id, sheet_id, 'A', major_dimension='COLUMNS')
     if not values or not values[0]:
         return 0
 
@@ -320,16 +431,6 @@ def _delete_rows_by_date(sheets, spreadsheet_id: str, sheet_name: str, target_da
 
     if not matching_rows:
         return 0
-
-    # Get numeric sheet ID
-    meta = sheets.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    sheet_id = None
-    for sheet in meta.get('sheets', []):
-        if sheet['properties']['title'] == sheet_name:
-            sheet_id = sheet['properties']['sheetId']
-            break
-    if sheet_id is None:
-        raise ValueError(f"Sheet '{sheet_name}' not found")
 
     # Build delete requests bottom-up (so indices stay valid)
     requests = []
@@ -380,30 +481,28 @@ def inject_to_google_sheets(
     logger.info('Injecting %d matches into "%s"...', len(match_data), sheet_name)
     logger.info('Using column preset: %s', config.sheets.preset or 'ORIGINAL')
 
+    # Resolve sheet name → numeric sheetId (avoids '/' issues in ranges)
+    sheet_props = _get_sheet_props(sheets, spreadsheet_id, sheet_name)
+    sheet_id = sheet_props['sheetId']
+
     # Deduplicate: delete existing rows for the same date(s)
     dates_in_batch = {m.get('date', '') for m in match_data if m.get('date')}
     total_deleted = 0
     for date_str in dates_in_batch:
-        deleted = _delete_rows_by_date(sheets, spreadsheet_id, sheet_name, date_str)
+        deleted = _delete_rows_by_date(sheets, spreadsheet_id, sheet_id, date_str)
         total_deleted += deleted
     if total_deleted:
         dates = ', '.join(sorted(dates_in_batch))
         logger.info('Dedup: removed %d existing rows for date(s) %s', total_deleted, dates)
 
     # Find the next empty row to append after existing data
-    next_empty = find_next_empty_row(sheets, spreadsheet_id, sheet_name)
+    next_empty = find_next_empty_row(sheets, spreadsheet_id, sheet_id)
     start_row = max(start_row, next_empty)
     end_row = start_row + len(match_data) - 1
     logger.info('Writing to rows %d-%d (appending after existing data)', start_row, end_row)
 
     # Ensure sheet has enough rows (deleteDimension can shrink the grid)
-    meta = (
-        sheets.spreadsheets()
-        .get(spreadsheetId=spreadsheet_id, ranges=[f"'{sheet_name}'"], includeGridData=False)
-        .execute()
-    )
-    sheet_props = meta['sheets'][0]['properties']
-    sheet_id = sheet_props['sheetId']
+    sheet_props = _get_sheet_props(sheets, spreadsheet_id, sheet_name)
     current_rows = sheet_props['gridProperties']['rowCount']
     if end_row > current_rows:
         rows_to_add = end_row - current_rows
@@ -421,16 +520,20 @@ def inject_to_google_sheets(
                 ]
             },
         ).execute()
-        logger.info('Expanded sheet by %d rows (was %d, now %d)', rows_to_add, current_rows, end_row)
+        logger.info(
+            'Expanded sheet by %d rows (was %d, now %d)',
+            rows_to_add,
+            current_rows,
+            end_row,
+        )
 
-    value_ranges = []
+    write_data = []
 
     # Match info - handle contiguous columns (A-H for ORIGINAL, or A + I-O for modified)
     if preset.get('matchInfo'):
         match_info = preset['matchInfo']
 
         # Check if match info columns are contiguous (ORIGINAL preset: A-H)
-        # For ORIGINAL: date=A, time=B, country=C, league=D, teamA=E, rankA=F, teamB=G, rankB=H
         if match_info['time'] == 'B':
             # Contiguous A-H block (ORIGINAL / HOCKEY UND)
             row_values = []
@@ -458,9 +561,11 @@ def inject_to_google_sheets(
 
             col_from = match_info['date']
             col_to = match_info.get('ecart', match_info['rankB'])
-            value_ranges.append(
+            write_data.append(
                 {
-                    'range': f"'{sheet_name}'!{col_from}{start_row}:{col_to}{end_row}",
+                    'start_col': col_from,
+                    'end_col': col_to,
+                    'start_row': start_row,
                     'values': row_values,
                 }
             )
@@ -468,9 +573,11 @@ def inject_to_google_sheets(
             # Modified preset - Date column (A) separate, then I-O
             date_values = [[m.get('date', '')] for m in match_data]
             date_col = match_info['date']
-            value_ranges.append(
+            write_data.append(
                 {
-                    'range': f"'{sheet_name}'!{date_col}{start_row}:{date_col}{end_row}",
+                    'start_col': date_col,
+                    'end_col': date_col,
+                    'start_row': start_row,
                     'values': date_values,
                 }
             )
@@ -490,9 +597,11 @@ def inject_to_google_sheets(
             ]
             col_from = match_info['time']
             col_to = match_info['rankB']
-            value_ranges.append(
+            write_data.append(
                 {
-                    'range': f"'{sheet_name}'!{col_from}{start_row}:{col_to}{end_row}",
+                    'start_col': col_from,
+                    'end_col': col_to,
+                    'start_row': start_row,
                     'values': match_info_values,
                 }
             )
@@ -506,11 +615,11 @@ def inject_to_google_sheets(
         ]
         for m in match_data
     ]
-    col_from = preset['teamA']['set3']
-    col_to = preset['teamA']['set5']
-    value_ranges.append(
+    write_data.append(
         {
-            'range': f"'{sheet_name}'!{col_from}{start_row}:{col_to}{end_row}",
+            'start_col': preset['teamA']['set3'],
+            'end_col': preset['teamA']['set5'],
+            'start_row': start_row,
             'values': team_a_values,
         }
     )
@@ -524,11 +633,11 @@ def inject_to_google_sheets(
         ]
         for m in match_data
     ]
-    col_from = preset['teamB']['set3']
-    col_to = preset['teamB']['set5']
-    value_ranges.append(
+    write_data.append(
         {
-            'range': f"'{sheet_name}'!{col_from}{start_row}:{col_to}{end_row}",
+            'start_col': preset['teamB']['set3'],
+            'end_col': preset['teamB']['set5'],
+            'start_row': start_row,
             'values': team_b_values,
         }
     )
@@ -543,20 +652,17 @@ def inject_to_google_sheets(
             ]
             for m in match_data
         ]
-        col_from = preset['h2h']['set3']
-        col_to = preset['h2h']['set5']
-        value_ranges.append(
+        write_data.append(
             {
-                'range': f"'{sheet_name}'!{col_from}{start_row}:{col_to}{end_row}",
+                'start_col': preset['h2h']['set3'],
+                'end_col': preset['h2h']['set5'],
+                'start_row': start_row,
                 'values': h2h_values,
             }
         )
 
-    # Batch update all values (won't touch other columns)
-    sheets.spreadsheets().values().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={'valueInputOption': 'USER_ENTERED', 'data': value_ranges},
-    ).execute()
+    # Batch write all values (won't touch other columns)
+    _write_values(sheets, spreadsheet_id, sheet_id, write_data)
 
     logger.info('Successfully injected %d matches', len(match_data))
     logger.info('Columns updated:')
@@ -564,11 +670,27 @@ def inject_to_google_sheets(
         mi = preset['matchInfo']
         logger.info('  - Date: %s', mi['date'])
         last_col = mi.get('ecart', mi['rankB'])
-        logger.info('  - Match info: %s-%s (time, country, league, teams, ranks)', mi['time'], last_col)
-    logger.info('  - Team A stats: %s-%s', preset['teamA']['set3'], preset['teamA']['set5'])
-    logger.info('  - Team B stats: %s-%s', preset['teamB']['set3'], preset['teamB']['set5'])
+        logger.info(
+            '  - Match info: %s-%s (time, country, league, teams, ranks)',
+            mi['time'],
+            last_col,
+        )
+    logger.info(
+        '  - Team A stats: %s-%s',
+        preset['teamA']['set3'],
+        preset['teamA']['set5'],
+    )
+    logger.info(
+        '  - Team B stats: %s-%s',
+        preset['teamB']['set3'],
+        preset['teamB']['set5'],
+    )
     if preset.get('h2h'):
-        logger.info('  - H2H stats: %s-%s', preset['h2h']['set3'], preset['h2h']['set5'])
+        logger.info(
+            '  - H2H stats: %s-%s',
+            preset['h2h']['set3'],
+            preset['h2h']['set5'],
+        )
 
 
 def inject_original_formulas() -> None:
@@ -589,18 +711,20 @@ def inject_original_formulas() -> None:
     preset = get_column_preset()
     sheet_name = config.sheets.tab_name or preset['sheetName']
 
-    last_row = find_next_empty_row(sheets, spreadsheet_id, sheet_name) - 1
+    sheet_props = _get_sheet_props(sheets, spreadsheet_id, sheet_name)
+    sheet_id = sheet_props['sheetId']
+
+    last_row = find_next_empty_row(sheets, spreadsheet_id, sheet_id) - 1
     if last_row < 2:
         logger.info('No data rows found, skipping formula injection.')
         return
 
     logger.info('Injecting formulas for rows 2-%d in "%s"...', last_row, sheet_name)
 
-    formula_ranges = _build_original_formulas(sheet_name, 2, last_row)
+    formula_data = _build_original_formulas(2, last_row)
+    _write_values(sheets, spreadsheet_id, sheet_id, formula_data)
 
-    sheets.spreadsheets().values().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={'valueInputOption': 'USER_ENTERED', 'data': formula_ranges},
-    ).execute()
-
-    logger.info('Formulas injected: I, L, P-V, W, AA-AG, AI, AM-AS, AU-BA, BC-BF (rows 2-%d)', last_row)
+    logger.info(
+        'Formulas injected: I, L, P-V, W, AA-AG, AI, AM-AS, AU-BA, BC-BF (rows 2-%d)',
+        last_row,
+    )

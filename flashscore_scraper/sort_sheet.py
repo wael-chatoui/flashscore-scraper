@@ -12,7 +12,14 @@ import logging
 import os
 import sys
 
-from .sheets import COLUMN_PRESETS, get_google_sheets_client
+from .sheets import (
+    COLUMN_PRESETS,
+    _col_to_index,
+    _get_sheet_props,
+    _read_values,
+    _write_values,
+    get_google_sheets_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,78 +32,56 @@ def get_spreadsheet_id() -> str:
     return spreadsheet_id
 
 
-def get_sheet_id(sheets_service, spreadsheet_id: str, sheet_name: str) -> int:
-    """Get the numeric sheet ID from sheet name"""
-    result = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-
-    for sheet in result.get('sheets', []):
-        props = sheet.get('properties', {})
-        if props.get('title') == sheet_name:
-            return props.get('sheetId')
-
-    raise ValueError(f"Sheet '{sheet_name}' not found")
+# Keep col_to_index as a public alias (used by tests)
+col_to_index = _col_to_index
 
 
-def col_to_index(col_letter: str) -> int:
-    """Convert column letter (A, B, ..., Z, AA, AB, ...) to 0-based index"""
-    result = 0
-    for char in col_letter.upper():
-        result = result * 26 + (ord(char) - ord('A') + 1)
-    return result - 1
-
-
-def normalize_dates(sheets, spreadsheet_id: str, sheet_name: str, date_col: str) -> None:
+def normalize_dates(sheets, spreadsheet_id: str, sheet_id: int, date_col: str) -> None:
     """
     Re-write date column with USER_ENTERED so text dates become real date values.
     This ensures SortRange sorts chronologically, not alphabetically.
     Only touches column A (date column), preserves all other columns/formulas.
     """
-    result = (
-        sheets.spreadsheets()
-        .values()
-        .batchGet(
-            spreadsheetId=spreadsheet_id,
-            ranges=[f"'{sheet_name}'!{date_col}2:{date_col}"],
-            majorDimension='COLUMNS',
-        )
-        .execute()
+    values = _read_values(
+        sheets,
+        spreadsheet_id,
+        sheet_id,
+        date_col,
+        start_row=2,
+        major_dimension='COLUMNS',
     )
-    values = result.get('valueRanges', [{}])[0].get('values', [[]])
     if not values or not values[0]:
         return
 
     col_values = values[0]
     # Write back only the date column with USER_ENTERED to convert text→date
-    sheets.spreadsheets().values().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={
-            'valueInputOption': 'USER_ENTERED',
-            'data': [
-                {
-                    'range': f"'{sheet_name}'!{date_col}2:{date_col}{len(col_values) + 1}",
-                    'values': [[v] for v in col_values],
-                }
-            ],
-        },
-    ).execute()
+    _write_values(
+        sheets,
+        spreadsheet_id,
+        sheet_id,
+        [
+            {
+                'start_col': date_col,
+                'end_col': date_col,
+                'start_row': 2,
+                'values': [[v] for v in col_values],
+            }
+        ],
+    )
     logger.info('  Normalized %d date values in column %s', len(col_values), date_col)
 
 
-def delete_blank_rows(
-    sheets, spreadsheet_id: str, sheet_id: int, sheet_name: str, date_col: str
-) -> None:
+def delete_blank_rows(sheets, spreadsheet_id: str, sheet_id: int, date_col: str) -> None:
     """Delete rows where the date column and all match info columns (A-H) are empty."""
-    result = (
-        sheets.spreadsheets()
-        .values()
-        .batchGet(
-            spreadsheetId=spreadsheet_id,
-            ranges=[f"'{sheet_name}'!A2:H"],
-            majorDimension='ROWS',
-        )
-        .execute()
+    rows = _read_values(
+        sheets,
+        spreadsheet_id,
+        sheet_id,
+        'A',
+        'H',
+        start_row=2,
+        major_dimension='ROWS',
     )
-    rows = result.get('valueRanges', [{}])[0].get('values', [])
 
     # Find blank row ranges (where A-H are all empty), work bottom-up
     blank_ranges = []
@@ -175,32 +160,28 @@ def sort_sheet_by_date(
 
     # Get date column index from preset (column A)
     date_col = preset['matchInfo']['date']
-    date_col_index = col_to_index(date_col)
+    date_col_index = _col_to_index(date_col)
 
     order = 'descending' if descending else 'ascending'
     logger.info("Sorting '%s' by column %s (%s)...", target_sheet, date_col, order)
     logger.info('  Spreadsheet: %s...', spreadsheet_id[:8])
 
-    # Get the numeric sheet ID needed for batchUpdate
-    sheet_id = get_sheet_id(sheets, spreadsheet_id, target_sheet)
+    # Resolve sheet name → numeric sheetId
+    sheet_props = _get_sheet_props(sheets, spreadsheet_id, target_sheet)
+    sheet_id = sheet_props['sheetId']
 
     # Step 1: Delete blank rows
     logger.info('  Cleaning up blank rows...')
-    delete_blank_rows(sheets, spreadsheet_id, sheet_id, target_sheet, date_col)
+    delete_blank_rows(sheets, spreadsheet_id, sheet_id, date_col)
 
     # Step 2: Normalize dates so text dates become real date serial values
     logger.info('  Normalizing dates for correct sort order...')
-    normalize_dates(sheets, spreadsheet_id, target_sheet, date_col)
+    normalize_dates(sheets, spreadsheet_id, sheet_id, date_col)
 
     # Step 3: Get updated sheet dimensions after deletions
-    sheet_meta = (
-        sheets.spreadsheets()
-        .get(spreadsheetId=spreadsheet_id, ranges=[f"'{target_sheet}'"], includeGridData=False)
-        .execute()
-    )
-    grid_props = sheet_meta['sheets'][0]['properties']['gridProperties']
-    row_count = grid_props['rowCount']
-    col_count = grid_props['columnCount']
+    sheet_props = _get_sheet_props(sheets, spreadsheet_id, target_sheet)
+    row_count = sheet_props['gridProperties']['rowCount']
+    col_count = sheet_props['gridProperties']['columnCount']
 
     sort_order = 'DESCENDING' if descending else 'ASCENDING'
 
@@ -218,7 +199,12 @@ def sort_sheet_by_date(
                             'startColumnIndex': 0,
                             'endColumnIndex': col_count,
                         },
-                        'sortSpecs': [{'dimensionIndex': date_col_index, 'sortOrder': sort_order}],
+                        'sortSpecs': [
+                            {
+                                'dimensionIndex': date_col_index,
+                                'sortOrder': sort_order,
+                            }
+                        ],
                     }
                 }
             ]
