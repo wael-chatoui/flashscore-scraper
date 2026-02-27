@@ -22,6 +22,11 @@ class GoogleConfig:
     # Your Google Sheet ID (from the URL: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit)
     spreadsheet_id: str = field(default_factory=lambda: os.getenv('SPREADSHEET_ID', ''))
 
+    # Separate spreadsheet for hockey (optional — falls back to SPREADSHEET_ID)
+    hockey_spreadsheet_id: str = field(
+        default_factory=lambda: os.getenv('HOCKEY_SPREADSHEET_ID', '')
+    )
+
     # Path to Google service account credentials JSON file
     # Download from Google Cloud Console > APIs & Services > Credentials
     credentials_path: str = field(

@@ -177,15 +177,21 @@ async def main() -> None:
             logger.info('Your scraped data has been saved to JSON file.')
             return
 
-        # Hockey uses HOCKEY UND preset by default
+        # Hockey uses HOCKEY UND preset and separate spreadsheet
         if is_hockey and config.sheets.preset not in ('HOCKEY UND',):
             config.sheets.preset = 'HOCKEY UND'
+        hockey_sheet_id = config.google.hockey_spreadsheet_id if is_hockey else None
 
-        inject_to_google_sheets(match_data, config.sheets.start_row)
+        inject_to_google_sheets(
+            match_data, config.sheets.start_row, spreadsheet_id=hockey_sheet_id
+        )
 
         # Sort sheet by date after injection
         logger.info('\n[3/4] Sorting sheet by date...\n')
-        sort_sheet_by_date(preset_name=config.sheets.preset or 'ORIGINAL')
+        sort_sheet_by_date(
+            preset_name=config.sheets.preset or 'ORIGINAL',
+            spreadsheet_id=hockey_sheet_id,
+        )
 
         # Inject formulas AFTER sorting (skip for hockey — client has own formulas)
         if not is_hockey:
