@@ -76,9 +76,10 @@ COLUMN_PRESETS = {
         'teamB': {'set3': 'AE', 'set4': 'AF', 'set5': 'AG'},
         'h2h': {'set3': 'AJ', 'set4': 'AK', 'set5': 'AL'},
     },
-    # Hockey Under 5.5/6 preset
-    # GREEN columns only: A-I (match info), P-R (Team A), W-Y (Team B)
+    # Hockey Under 4.5/5.5/6 preset
+    # GREEN columns only: A-I (match info), O-R (Team A), V-Y (Team B)
     # No H2H section — only per-team last-15 stats
+    # set2=<=4, set3=<=5, set4==6, set5=>=7
     'HOCKEY UND': {
         'sheetName': 'SCRAPING UND 5.5/6',
         'matchInfo': {
@@ -92,8 +93,8 @@ COLUMN_PRESETS = {
             'rankB': 'H',
             'ecart': 'I',
         },
-        'teamA': {'set3': 'P', 'set4': 'Q', 'set5': 'R'},
-        'teamB': {'set3': 'W', 'set4': 'X', 'set5': 'Y'},
+        'teamA': {'set2': 'O', 'set3': 'P', 'set4': 'Q', 'set5': 'R'},
+        'teamB': {'set2': 'V', 'set3': 'W', 'set4': 'X', 'set5': 'Y'},
         'h2h': None,
     },
     # Alternative mapping based on CSV structure
@@ -607,8 +608,14 @@ def inject_to_google_sheets(
             )
 
     # Team A stats (0 = no data available, keeps formulas working)
+    has_set2 = 'set2' in preset['teamA']
     team_a_values = [
         [
+            *(
+                [m.get('teamAStats', {}).get('count2', 0)]
+                if has_set2
+                else []
+            ),
             m.get('teamAStats', {}).get('count3', 0),
             m.get('teamAStats', {}).get('count4', 0),
             m.get('teamAStats', {}).get('count5', 0),
@@ -617,7 +624,7 @@ def inject_to_google_sheets(
     ]
     write_data.append(
         {
-            'start_col': preset['teamA']['set3'],
+            'start_col': preset['teamA'].get('set2', preset['teamA']['set3']),
             'end_col': preset['teamA']['set5'],
             'start_row': start_row,
             'values': team_a_values,
@@ -627,6 +634,11 @@ def inject_to_google_sheets(
     # Team B stats (0 = no data available, keeps formulas working)
     team_b_values = [
         [
+            *(
+                [m.get('teamBStats', {}).get('count2', 0)]
+                if has_set2
+                else []
+            ),
             m.get('teamBStats', {}).get('count3', 0),
             m.get('teamBStats', {}).get('count4', 0),
             m.get('teamBStats', {}).get('count5', 0),
@@ -635,7 +647,7 @@ def inject_to_google_sheets(
     ]
     write_data.append(
         {
-            'start_col': preset['teamB']['set3'],
+            'start_col': preset['teamB'].get('set2', preset['teamB']['set3']),
             'end_col': preset['teamB']['set5'],
             'start_row': start_row,
             'values': team_b_values,
@@ -677,12 +689,12 @@ def inject_to_google_sheets(
         )
     logger.info(
         '  - Team A stats: %s-%s',
-        preset['teamA']['set3'],
+        preset['teamA'].get('set2', preset['teamA']['set3']),
         preset['teamA']['set5'],
     )
     logger.info(
         '  - Team B stats: %s-%s',
-        preset['teamB']['set3'],
+        preset['teamB'].get('set2', preset['teamB']['set3']),
         preset['teamB']['set5'],
     )
     if preset.get('h2h'):

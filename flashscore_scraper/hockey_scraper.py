@@ -2,7 +2,7 @@
 FlashScore Hockey Scraper
 
 Scrapes hockey matches and per-team last-15 goal statistics from FlashScore.
-Goal categorization: <=5 goals, =6 goals, >=7 goals.
+Goal categorization: <=4 goals, <=5 goals, =6 goals, >=7 goals.
 Sport-specific logic only — shared infrastructure lives in base_scraper.
 """
 
@@ -45,10 +45,11 @@ HOCKEY_SELECTORS = build_selectors(
 
 
 # ── TypedDicts ────────────────────────────────────────────────────────
-# count3 = <=5 goals, count4 = =6 goals, count5 = >=7 goals
+# count2 = <=4 goals, count3 = <=5 goals, count4 = =6 goals, count5 = >=7 goals
 
 
 class GoalStats(TypedDict):
+    count2: int  # <=4 goals
     count3: int  # <=5 goals
     count4: int  # =6 goals
     count5: int  # >=7 goals
@@ -104,11 +105,12 @@ def parse_hockey_score(text: str) -> tuple[int | None, int | None]:
 async def count_goals_in_section(section: ElementHandle, max_matches: int = 15) -> GoalStats:
     """Count goal distribution from an H2H section.
 
-    Categorizes: <=5 goals (count3), =6 goals (count4), >=7 goals (count5).
+    Categorizes: <=4 goals (count2), <=5 goals (count3), =6 goals (count4),
+    >=7 goals (count5).  count2 is cumulative (subset of count3).
     Stops after max_matches (default 15).
     """
     rows = await section.query_selector_all(HOCKEY_SELECTORS['h2h']['row'])
-    count3, count4, count5 = 0, 0, 0
+    count2, count3, count4, count5 = 0, 0, 0, 0
     processed = 0
 
     for row in rows:
@@ -130,6 +132,8 @@ async def count_goals_in_section(section: ElementHandle, max_matches: int = 15) 
             total_goals = goals_a + goals_b
             processed += 1
 
+            if total_goals <= 4:
+                count2 += 1
             if total_goals <= 5:
                 count3 += 1
             elif total_goals == 6:
@@ -139,7 +143,7 @@ async def count_goals_in_section(section: ElementHandle, max_matches: int = 15) 
         except Exception:
             pass
 
-    return {'count3': count3, 'count4': count4, 'count5': count5}
+    return {'count2': count2, 'count3': count3, 'count4': count4, 'count5': count5}
 
 
 # ── Hockey-specific H2H logic ───────────────────────────────────────
@@ -152,7 +156,7 @@ async def scrape_hockey_h2h_stats(
 
     Skips the "confrontation directe" section — only processes per-team sections.
     """
-    default_stats: GoalStats = {'count3': 0, 'count4': 0, 'count5': 0}
+    default_stats: GoalStats = {'count2': 0, 'count3': 0, 'count4': 0, 'count5': 0}
 
     try:
         await goto_with_retry(page, h2h_url)
@@ -267,8 +271,8 @@ async def scrape_hockey(days_offset: int = 0) -> list[HockeyMatchWithStats]:
         days_offset: Number of days from today to scrape.
     """
     default_stats = {
-        'teamAStats': {'count3': 0, 'count4': 0, 'count5': 0},
-        'teamBStats': {'count3': 0, 'count4': 0, 'count5': 0},
+        'teamAStats': {'count2': 0, 'count3': 0, 'count4': 0, 'count5': 0},
+        'teamBStats': {'count2': 0, 'count3': 0, 'count4': 0, 'count5': 0},
     }
     validation_checks = {
         'match rows': HOCKEY_SELECTORS['matches']['all_items'],

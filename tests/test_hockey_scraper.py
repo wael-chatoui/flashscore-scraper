@@ -56,12 +56,27 @@ class TestParseHockeyScore:
 
 
 class TestGoalCategorization:
-    """Test the categorization logic: <=5, =6, >=7 total goals."""
+    """Test the categorization logic: <=4, <=5, =6, >=7 total goals."""
 
-    def test_under_five_goals(self):
-        # 2+1=3 total goals → <=5
+    def test_under_four_goals(self):
+        # 2+1=3 total goals → <=4 and <=5
         a, b = parse_hockey_score('2:1')
         total = a + b
+        assert total <= 4
+        assert total <= 5
+
+    def test_exactly_four_goals(self):
+        # 3+1=4 total goals → <=4 and <=5
+        a, b = parse_hockey_score('3:1')
+        total = a + b
+        assert total <= 4
+        assert total <= 5
+
+    def test_exactly_five_goals(self):
+        # 3+2=5 → <=5 but NOT <=4
+        a, b = parse_hockey_score('3:2')
+        total = a + b
+        assert total > 4
         assert total <= 5
 
     def test_exactly_six_goals(self):
@@ -76,11 +91,18 @@ class TestGoalCategorization:
         total = a + b
         assert total >= 7
 
+    def test_four_goals_boundary(self):
+        # 2+2=4 → <=4 category
+        a, b = parse_hockey_score('2:2')
+        total = a + b
+        assert total <= 4
+
     def test_five_goals_boundary(self):
-        # 3+2=5 → <=5 category
+        # 3+2=5 → <=5 but not <=4
         a, b = parse_hockey_score('3:2')
         total = a + b
         assert total <= 5
+        assert total > 4
 
     def test_six_goals_boundary(self):
         # 3+3=6 → =6 category

@@ -10,7 +10,10 @@ def test_presets_have_required_keys():
 
 
 def test_stats_keys():
-    """Each stats group must define set3, set4, set5 (unless h2h is None)."""
+    """Each stats group must define set3, set4, set5 (unless h2h is None).
+
+    Hockey presets may additionally define set2 (<=4 goals).
+    """
     for name, preset in COLUMN_PRESETS.items():
         for group in ('teamA', 'teamB'):
             for key in ('set3', 'set4', 'set5'):
@@ -42,5 +45,5 @@ def test_hockey_preset():
     mi = preset['matchInfo']
     assert mi['date'] == 'A'
     assert mi['ecart'] == 'I'
-    assert preset['teamA'] == {'set3': 'P', 'set4': 'Q', 'set5': 'R'}
-    assert preset['teamB'] == {'set3': 'W', 'set4': 'X', 'set5': 'Y'}
+    assert preset['teamA'] == {'set2': 'O', 'set3': 'P', 'set4': 'Q', 'set5': 'R'}
+    assert preset['teamB'] == {'set2': 'V', 'set3': 'W', 'set4': 'X', 'set5': 'Y'}
