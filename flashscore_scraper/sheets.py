@@ -77,7 +77,7 @@ COLUMN_PRESETS = {
         'h2h': {'set3': 'AJ', 'set4': 'AK', 'set5': 'AL'},
     },
     # Hockey Under 4.5/5.5/6 preset
-    # GREEN columns only: A-I (match info), O-R (Team A), V-Y (Team B)
+    # GREEN columns only: A-J (match info), O-R (Team A), W-Y (Team B)
     # No H2H section — only per-team last-15 stats
     # set2=<=4, set3=<=5, set4==6, set5=>=7
     'HOCKEY UND': {
@@ -85,16 +85,17 @@ COLUMN_PRESETS = {
         'matchInfo': {
             'date': 'A',
             'time': 'B',
-            'country': 'C',
-            'league': 'D',
-            'teamA': 'E',
-            'rankA': 'F',
-            'teamB': 'G',
-            'rankB': 'H',
-            'ecart': 'I',
+            'sexe': 'C',
+            'country': 'D',
+            'league': 'E',
+            'teamA': 'F',
+            'rankA': 'G',
+            'teamB': 'H',
+            'rankB': 'I',
+            'ecart': 'J',
         },
         'teamA': {'set2': 'O', 'set3': 'P', 'set4': 'Q', 'set5': 'R'},
-        'teamB': {'set2': 'V', 'set3': 'W', 'set4': 'X', 'set5': 'Y'},
+        'teamB': {'set3': 'W', 'set4': 'X', 'set5': 'Y'},
         'h2h': None,
     },
     # Alternative mapping based on CSV structure
@@ -535,20 +536,25 @@ def inject_to_google_sheets(
         match_info = preset['matchInfo']
 
         # Check if match info columns are contiguous (ORIGINAL preset: A-H)
+        has_sexe = 'sexe' in match_info
         if match_info['time'] == 'B':
-            # Contiguous A-H block (ORIGINAL / HOCKEY UND)
+            # Contiguous A-based block (ORIGINAL / HOCKEY UND)
             row_values = []
             for m in match_data:
                 row = [
                     m.get('date', ''),
                     m.get('time', ''),
+                ]
+                if has_sexe:
+                    row.append(m.get('sexe', ''))
+                row.extend([
                     m.get('country', ''),
                     m.get('league', ''),
                     m.get('teamA', ''),
                     m.get('rankA', ''),
                     m.get('teamB', ''),
                     m.get('rankB', ''),
-                ]
+                ])
                 # Append ecart (rank difference) if the preset has an ecart column
                 if 'ecart' in match_info:
                     rank_a = m.get('rankA', '')
@@ -608,12 +614,12 @@ def inject_to_google_sheets(
             )
 
     # Team A stats (0 = no data available, keeps formulas working)
-    has_set2 = 'set2' in preset['teamA']
+    has_set2_a = 'set2' in preset['teamA']
     team_a_values = [
         [
             *(
                 [m.get('teamAStats', {}).get('count2', 0)]
-                if has_set2
+                if has_set2_a
                 else []
             ),
             m.get('teamAStats', {}).get('count3', 0),
@@ -632,11 +638,12 @@ def inject_to_google_sheets(
     )
 
     # Team B stats (0 = no data available, keeps formulas working)
+    has_set2_b = 'set2' in preset['teamB']
     team_b_values = [
         [
             *(
                 [m.get('teamBStats', {}).get('count2', 0)]
-                if has_set2
+                if has_set2_b
                 else []
             ),
             m.get('teamBStats', {}).get('count3', 0),

@@ -1,4 +1,4 @@
-from flashscore_scraper.hockey_scraper import parse_hockey_score
+from flashscore_scraper.hockey_scraper import detect_sexe, parse_hockey_score
 
 
 class TestParseHockeyScore:
@@ -115,3 +115,37 @@ class TestGoalCategorization:
         a, b = parse_hockey_score('4:3')
         total = a + b
         assert total >= 7
+
+
+class TestDetectSexe:
+    def test_default_is_homme(self):
+        assert detect_sexe('NHL') == 'H'
+        assert detect_sexe('KHL') == 'H'
+        assert detect_sexe('SHL') == 'H'
+
+    def test_women_keyword(self):
+        assert detect_sexe("IIHF Women's World Championship") == 'F'
+
+    def test_femme_keyword(self):
+        assert detect_sexe('Ligue Femme') == 'F'
+
+    def test_feminine_keyword(self):
+        assert detect_sexe('Division 1 Féminin') == 'F'
+
+    def test_dames_keyword(self):
+        assert detect_sexe('Championnat Dames') == 'F'
+
+    def test_ladies_keyword(self):
+        assert detect_sexe('Ladies League') == 'F'
+
+    def test_f_suffix(self):
+        assert detect_sexe('SDHL (F)') == 'F'
+
+    def test_w_suffix(self):
+        assert detect_sexe('PWHL (W)') == 'F'
+
+    def test_case_insensitive(self):
+        assert detect_sexe('WOMEN HOCKEY LEAGUE') == 'F'
+
+    def test_empty_string(self):
+        assert detect_sexe('') == 'H'

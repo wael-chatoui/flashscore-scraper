@@ -44,6 +44,16 @@ def test_hockey_preset():
     assert preset['h2h'] is None
     mi = preset['matchInfo']
     assert mi['date'] == 'A'
-    assert mi['ecart'] == 'I'
+    assert mi['time'] == 'B'
+    assert mi['sexe'] == 'C'
+    assert mi['country'] == 'D'
+    assert mi['league'] == 'E'
+    assert mi['teamA'] == 'F'
+    assert mi['rankA'] == 'G'
+    assert mi['teamB'] == 'H'
+    assert mi['rankB'] == 'I'
+    assert mi['ecart'] == 'J'
     assert preset['teamA'] == {'set2': 'O', 'set3': 'P', 'set4': 'Q', 'set5': 'R'}
-    assert preset['teamB'] == {'set2': 'V', 'set3': 'W', 'set4': 'X', 'set5': 'Y'}
+    # Team B has no set2 (<=4 goals column missing from sheet)
+    assert preset['teamB'] == {'set3': 'W', 'set4': 'X', 'set5': 'Y'}
+    assert 'set2' not in preset['teamB']

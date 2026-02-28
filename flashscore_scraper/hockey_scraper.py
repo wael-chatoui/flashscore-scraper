@@ -68,6 +68,24 @@ class HockeyMatchWithStats(HockeyMatch, HockeyMatchStats):
     pass
 
 
+# ── Helpers ──────────────────────────────────────────────────────────
+
+
+_FEMININE_KEYWORDS = (
+    'femme', 'women', 'féminin', 'feminine', 'dames', 'ladies',
+    '(f)', '(w)', 'women\'s',
+)
+
+
+def detect_sexe(league: str) -> str:
+    """Return 'F' for feminine leagues, 'H' otherwise."""
+    lower = league.lower()
+    for kw in _FEMININE_KEYWORDS:
+        if kw in lower:
+            return 'F'
+    return 'H'
+
+
 # ── Hockey-specific parsing ──────────────────────────────────────────
 
 

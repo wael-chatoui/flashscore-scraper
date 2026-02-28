@@ -182,6 +182,13 @@ async def main() -> None:
             config.sheets.preset = 'HOCKEY UND'
         hockey_sheet_id = config.google.hockey_spreadsheet_id if is_hockey else None
 
+        # Detect sexe (H/F) for hockey matches based on league name
+        if is_hockey:
+            from .hockey_scraper import detect_sexe
+
+            for m in match_data:
+                m['sexe'] = detect_sexe(m.get('league', ''))
+
         inject_to_google_sheets(
             match_data, config.sheets.start_row, spreadsheet_id=hockey_sheet_id
         )
