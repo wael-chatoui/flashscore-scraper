@@ -525,9 +525,19 @@ async def run_scraper(
                 match_data = {k: v for k, v in match.items() if k != 'leagueUrl'}
 
                 if match['matchUrl']:
-                    stats = await scrape_match_stats(
-                        page, match['matchUrl'], match['teamA'], match['teamB']
-                    )
+                    try:
+                        stats = await asyncio.wait_for(
+                            scrape_match_stats(
+                                page, match['matchUrl'], match['teamA'], match['teamB']
+                            ),
+                            timeout=120,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            'Timeout (120s) scraping match %s: %s vs %s (%s) — using default stats',
+                            n, match['teamA'], match['teamB'], match['matchUrl'],
+                        )
+                        stats = default_stats
                     # Warn if all returned stats are zero (possible rate-limit)
                     all_zero = all(
                         v == 0
