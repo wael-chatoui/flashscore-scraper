@@ -5,12 +5,11 @@ services:
     environment:
       # Google Sheets configuration
       - SPREADSHEET_ID=${SPREADSHEET_ID}
-      - HOCKEY_SPREADSHEET_ID=${HOCKEY_SPREADSHEET_ID:-}
       - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON}
       - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
 
       # Scraper settings
-      - SPORT=${SPORT:-volleyball}
+      - SPORT=volleyball
       - HEADLESS=true
       - REQUEST_DELAY=1000
       - MAX_MATCHES=0
@@ -37,17 +36,54 @@ services:
         reservations:
           memory: 512M
 
+  hockey-scraper:
+    build: .
+    container_name: flashscore-hockey-scraper
+    environment:
+      # Google Sheets configuration
+      - SPREADSHEET_ID=${SPREADSHEET_ID}
+      - HOCKEY_SPREADSHEET_ID=${HOCKEY_SPREADSHEET_ID:-}
+      - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON}
+      - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
+
+      # Scraper settings
+      - SPORT=hockey
+      - HEADLESS=true
+      - REQUEST_DELAY=1000
+      - MAX_MATCHES=0
+
+      # Sheet configuration
+      - SHEET_PRESET=HOCKEY UND
+      - SHEET_TAB_NAME=${HOCKEY_SHEET_TAB_NAME:-}
+      - START_ROW=${START_ROW:-2}
+
+    volumes:
+      - ./credentials.json:/app/credentials.json:ro
+      - ./output:/app/output
+
+    restart: "no"
+
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
   # Optional: Scheduled runner using ofelia (cron for Docker)
   scheduler:
     image: mcuadros/ofelia:latest
     container_name: flashscore-scheduler
     depends_on:
       - scraper
+      - hockey-scraper
     command: daemon --docker
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     labels:
-      ofelia.job-run.scraper.schedule: "0 0 1 * * *"  # Run at 1:00 AM UTC daily (6-field: sec min hour day month weekday)
-      ofelia.job-run.scraper.container: "flashscore-volleyball-scraper"
+      ofelia.job-run.volleyball.schedule: "0 0 1 * * *"  # Run at 1:00 AM UTC daily
+      ofelia.job-run.volleyball.container: "flashscore-volleyball-scraper"
+      ofelia.job-run.hockey.schedule: "0 0 2 * * *"  # Run at 2:00 AM UTC daily
+      ofelia.job-run.hockey.container: "flashscore-hockey-scraper"
     profiles:
       - scheduled  # Only start with: docker compose --profile scheduled up

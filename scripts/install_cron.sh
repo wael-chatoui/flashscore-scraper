@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# Install cron job or systemd timer for the FlashScore scraper
+# Install cron job or systemd timer for the FlashScore scrapers
 #
 # Usage:
-#   ./install_cron.sh cron      # Install crontab entry
-#   ./install_cron.sh systemd   # Install systemd timer (recommended)
+#   ./install_cron.sh cron      # Install crontab entries (volleyball + hockey)
+#   ./install_cron.sh systemd   # Install systemd timers (recommended)
 #   ./install_cron.sh remove    # Remove all scheduled tasks
 #
 
@@ -16,74 +16,94 @@ USER=$(whoami)
 
 case "$1" in
     cron)
-        echo "Installing cron job..."
+        echo "Installing cron jobs..."
 
-        # Create cron entry (runs at 1:00 AM daily to scrape tomorrow's matches)
-        CRON_CMD="0 1 * * * $SCRIPT_DIR/run_scraper.sh >> $PROJECT_DIR/logs/cron.log 2>&1"
-
-        # Check if already installed
-        if crontab -l 2>/dev/null | grep -q "run_scraper.sh"; then
-            echo "Cron job already exists. Updating..."
-            crontab -l | grep -v "run_scraper.sh" | crontab -
+        # Remove existing entries first
+        if crontab -l 2>/dev/null | grep -q "run_scraper.sh\|run_hockey_scraper.sh"; then
+            echo "Removing existing scraper cron jobs..."
+            crontab -l | grep -v "run_scraper.sh\|run_hockey_scraper.sh" | crontab -
         fi
 
-        # Add new cron entry
-        (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
+        # Volleyball: 1:00 AM daily
+        VOLLEY_CMD="0 1 * * * $SCRIPT_DIR/run_scraper.sh >> $PROJECT_DIR/logs/cron.log 2>&1"
+        # Hockey: 2:00 AM daily
+        HOCKEY_CMD="0 2 * * * $SCRIPT_DIR/run_hockey_scraper.sh >> $PROJECT_DIR/logs/cron_hockey.log 2>&1"
 
-        echo "Cron job installed:"
-        echo "  Schedule: Daily at 1:00 AM (scrapes tomorrow's matches)"
-        echo "  Command: $SCRIPT_DIR/run_scraper.sh"
+        (crontab -l 2>/dev/null; echo "$VOLLEY_CMD"; echo "$HOCKEY_CMD") | crontab -
+
+        echo "Cron jobs installed:"
+        echo "  Volleyball: Daily at 1:00 AM — $SCRIPT_DIR/run_scraper.sh"
+        echo "  Hockey:     Daily at 2:00 AM — $SCRIPT_DIR/run_hockey_scraper.sh"
         echo ""
         echo "View with: crontab -l"
         ;;
 
     systemd)
-        echo "Installing systemd timer..."
+        echo "Installing systemd timers..."
 
         # Create user systemd directory
         mkdir -p ~/.config/systemd/user
 
-        # Copy and customize service file
+        # --- Volleyball ---
         sed "s|%i|$USER|g; s|/home/%i/Work/test/scriping-sports|$PROJECT_DIR|g" \
             "$SCRIPT_DIR/flashscore-scraper.service" > ~/.config/systemd/user/flashscore-scraper.service
-
-        # Copy timer file
         cp "$SCRIPT_DIR/flashscore-scraper.timer" ~/.config/systemd/user/
 
-        # Reload systemd and enable timer
+        # --- Hockey ---
+        sed "s|%i|$USER|g; s|/home/%i/Work/test/scriping-sports|$PROJECT_DIR|g" \
+            "$SCRIPT_DIR/flashscore-hockey-scraper.service" > ~/.config/systemd/user/flashscore-hockey-scraper.service
+        cp "$SCRIPT_DIR/flashscore-hockey-scraper.timer" ~/.config/systemd/user/
+
+        # Reload and enable both
         systemctl --user daemon-reload
         systemctl --user enable flashscore-scraper.timer
         systemctl --user start flashscore-scraper.timer
+        systemctl --user enable flashscore-hockey-scraper.timer
+        systemctl --user start flashscore-hockey-scraper.timer
 
-        echo "Systemd timer installed and started:"
-        echo "  Schedule: Daily at 1:00 AM (scrapes tomorrow's matches)"
+        echo "Systemd timers installed and started:"
+        echo "  Volleyball: Daily at 1:00 AM"
+        echo "  Hockey:     Daily at 2:00 AM"
         echo ""
         echo "Commands:"
         echo "  Status:  systemctl --user status flashscore-scraper.timer"
+        echo "           systemctl --user status flashscore-hockey-scraper.timer"
         echo "  Logs:    journalctl --user -u flashscore-scraper.service"
+        echo "           journalctl --user -u flashscore-hockey-scraper.service"
         echo "  Run now: systemctl --user start flashscore-scraper.service"
+        echo "           systemctl --user start flashscore-hockey-scraper.service"
         echo "  Disable: systemctl --user disable flashscore-scraper.timer"
+        echo "           systemctl --user disable flashscore-hockey-scraper.timer"
         ;;
 
     remove)
         echo "Removing scheduled tasks..."
 
         # Remove cron
-        if crontab -l 2>/dev/null | grep -q "run_scraper.sh"; then
-            crontab -l | grep -v "run_scraper.sh" | crontab -
-            echo "Removed cron job"
+        if crontab -l 2>/dev/null | grep -q "run_scraper.sh\|run_hockey_scraper.sh"; then
+            crontab -l | grep -v "run_scraper.sh\|run_hockey_scraper.sh" | crontab -
+            echo "Removed cron jobs"
         fi
 
-        # Remove systemd
+        # Remove systemd — volleyball
         if [ -f ~/.config/systemd/user/flashscore-scraper.timer ]; then
             systemctl --user stop flashscore-scraper.timer 2>/dev/null || true
             systemctl --user disable flashscore-scraper.timer 2>/dev/null || true
             rm -f ~/.config/systemd/user/flashscore-scraper.timer
             rm -f ~/.config/systemd/user/flashscore-scraper.service
-            systemctl --user daemon-reload
-            echo "Removed systemd timer"
+            echo "Removed volleyball systemd timer"
         fi
 
+        # Remove systemd — hockey
+        if [ -f ~/.config/systemd/user/flashscore-hockey-scraper.timer ]; then
+            systemctl --user stop flashscore-hockey-scraper.timer 2>/dev/null || true
+            systemctl --user disable flashscore-hockey-scraper.timer 2>/dev/null || true
+            rm -f ~/.config/systemd/user/flashscore-hockey-scraper.timer
+            rm -f ~/.config/systemd/user/flashscore-hockey-scraper.service
+            echo "Removed hockey systemd timer"
+        fi
+
+        systemctl --user daemon-reload 2>/dev/null || true
         echo "All scheduled tasks removed"
         ;;
 
@@ -91,12 +111,11 @@ case "$1" in
         echo "Usage: $0 {cron|systemd|remove}"
         echo ""
         echo "Options:"
-        echo "  cron     - Install crontab entry (runs at 1:00 AM daily)"
-        echo "  systemd  - Install systemd timer (recommended, runs at 1:00 AM daily)"
+        echo "  cron     - Install crontab entries (volleyball at 1 AM, hockey at 2 AM)"
+        echo "  systemd  - Install systemd timers (recommended)"
         echo "  remove   - Remove all scheduled tasks"
         echo ""
-        echo "The scraper runs at 1:00 AM and fetches tomorrow's matches (J+1)."
-        echo "This way, the Google Sheet is ready with match data when the client wakes up."
+        echo "Both scrapers run daily so the Google Sheet is ready when the client wakes up."
         exit 1
         ;;
 esac

@@ -1,0 +1,17 @@
+[Unit]
+Description=FlashScore Hockey Scraper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Work/scraping/flashscore-scraper
+ExecStart=%h/Work/scraping/flashscore-scraper/scripts/run_hockey_scraper.sh
+StandardOutput=journal
+StandardError=journal
+
+# Environment file (optional)
+EnvironmentFile=-%h/Work/scraping/flashscore-scraper/.env
+
+[Install]
+WantedBy=multi-user.target
