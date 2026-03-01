@@ -98,6 +98,29 @@ COLUMN_PRESETS = {
         'teamB': {'set3': 'W', 'set4': 'X', 'set5': 'Y'},
         'h2h': None,
     },
+    # Hockey RAW preset — writes raw total-goal values (15 per team)
+    # Columns N-AB: Team A's last 15 match total goals (AM1–AM15)
+    # Columns AC-AQ: Team B's last 15 match total goals (BM1–BM15)
+    # No H2H, no aggregated stats — the sheet's own formulas handle computation
+    'HOCKEY RAW': {
+        'sheetName': 'SCRAPING UND 5.5/6',
+        'matchInfo': {
+            'date': 'A',
+            'time': 'B',
+            'country': 'C',
+            'league': 'D',
+            'teamA': 'E',
+            'rankA': 'F',
+            'teamB': 'G',
+            'rankB': 'H',
+            'ecart': 'I',
+        },
+        'teamAScores': {'start': 'N', 'end': 'AB', 'count': 15},
+        'teamBScores': {'start': 'AC', 'end': 'AQ', 'count': 15},
+        'teamA': None,
+        'teamB': None,
+        'h2h': None,
+    },
     # Alternative mapping based on CSV structure
     'CALCUL SET': {
         'sheetName': 'CALCUL SET',
@@ -613,53 +636,86 @@ def inject_to_google_sheets(
                 }
             )
 
-    # Team A stats (0 = no data available, keeps formulas working)
-    has_set2_a = 'set2' in preset['teamA']
-    team_a_values = [
-        [
-            *(
-                [m.get('teamAStats', {}).get('count2', 0)]
-                if has_set2_a
-                else []
-            ),
-            m.get('teamAStats', {}).get('count3', 0),
-            m.get('teamAStats', {}).get('count4', 0),
-            m.get('teamAStats', {}).get('count5', 0),
+    # Raw score columns (HOCKEY RAW preset: 15 total-goal values per team)
+    if preset.get('teamAScores'):
+        score_count = preset['teamAScores']['count']
+        team_a_score_values = [
+            (m.get('teamAScores', []) + [''] * score_count)[:score_count]
+            for m in match_data
         ]
-        for m in match_data
-    ]
-    write_data.append(
-        {
-            'start_col': preset['teamA'].get('set2', preset['teamA']['set3']),
-            'end_col': preset['teamA']['set5'],
-            'start_row': start_row,
-            'values': team_a_values,
-        }
-    )
+        write_data.append(
+            {
+                'start_col': preset['teamAScores']['start'],
+                'end_col': preset['teamAScores']['end'],
+                'start_row': start_row,
+                'values': team_a_score_values,
+            }
+        )
 
-    # Team B stats (0 = no data available, keeps formulas working)
-    has_set2_b = 'set2' in preset['teamB']
-    team_b_values = [
-        [
-            *(
-                [m.get('teamBStats', {}).get('count2', 0)]
-                if has_set2_b
-                else []
-            ),
-            m.get('teamBStats', {}).get('count3', 0),
-            m.get('teamBStats', {}).get('count4', 0),
-            m.get('teamBStats', {}).get('count5', 0),
+    if preset.get('teamBScores'):
+        score_count = preset['teamBScores']['count']
+        team_b_score_values = [
+            (m.get('teamBScores', []) + [''] * score_count)[:score_count]
+            for m in match_data
         ]
-        for m in match_data
-    ]
-    write_data.append(
-        {
-            'start_col': preset['teamB'].get('set2', preset['teamB']['set3']),
-            'end_col': preset['teamB']['set5'],
-            'start_row': start_row,
-            'values': team_b_values,
-        }
-    )
+        write_data.append(
+            {
+                'start_col': preset['teamBScores']['start'],
+                'end_col': preset['teamBScores']['end'],
+                'start_row': start_row,
+                'values': team_b_score_values,
+            }
+        )
+
+    # Team A stats — aggregated counts (0 = no data available, keeps formulas working)
+    if preset.get('teamA'):
+        has_set2_a = 'set2' in preset['teamA']
+        team_a_values = [
+            [
+                *(
+                    [m.get('teamAStats', {}).get('count2', 0)]
+                    if has_set2_a
+                    else []
+                ),
+                m.get('teamAStats', {}).get('count3', 0),
+                m.get('teamAStats', {}).get('count4', 0),
+                m.get('teamAStats', {}).get('count5', 0),
+            ]
+            for m in match_data
+        ]
+        write_data.append(
+            {
+                'start_col': preset['teamA'].get('set2', preset['teamA']['set3']),
+                'end_col': preset['teamA']['set5'],
+                'start_row': start_row,
+                'values': team_a_values,
+            }
+        )
+
+    # Team B stats — aggregated counts (0 = no data available, keeps formulas working)
+    if preset.get('teamB'):
+        has_set2_b = 'set2' in preset['teamB']
+        team_b_values = [
+            [
+                *(
+                    [m.get('teamBStats', {}).get('count2', 0)]
+                    if has_set2_b
+                    else []
+                ),
+                m.get('teamBStats', {}).get('count3', 0),
+                m.get('teamBStats', {}).get('count4', 0),
+                m.get('teamBStats', {}).get('count5', 0),
+            ]
+            for m in match_data
+        ]
+        write_data.append(
+            {
+                'start_col': preset['teamB'].get('set2', preset['teamB']['set3']),
+                'end_col': preset['teamB']['set5'],
+                'start_row': start_row,
+                'values': team_b_values,
+            }
+        )
 
     # H2H stats (skip when preset has no h2h, e.g. hockey)
     if preset.get('h2h'):
@@ -694,16 +750,32 @@ def inject_to_google_sheets(
             mi['time'],
             last_col,
         )
-    logger.info(
-        '  - Team A stats: %s-%s',
-        preset['teamA'].get('set2', preset['teamA']['set3']),
-        preset['teamA']['set5'],
-    )
-    logger.info(
-        '  - Team B stats: %s-%s',
-        preset['teamB'].get('set2', preset['teamB']['set3']),
-        preset['teamB']['set5'],
-    )
+    if preset.get('teamAScores'):
+        logger.info(
+            '  - Team A raw scores: %s-%s (%d cols)',
+            preset['teamAScores']['start'],
+            preset['teamAScores']['end'],
+            preset['teamAScores']['count'],
+        )
+    if preset.get('teamBScores'):
+        logger.info(
+            '  - Team B raw scores: %s-%s (%d cols)',
+            preset['teamBScores']['start'],
+            preset['teamBScores']['end'],
+            preset['teamBScores']['count'],
+        )
+    if preset.get('teamA'):
+        logger.info(
+            '  - Team A stats: %s-%s',
+            preset['teamA'].get('set2', preset['teamA']['set3']),
+            preset['teamA']['set5'],
+        )
+    if preset.get('teamB'):
+        logger.info(
+            '  - Team B stats: %s-%s',
+            preset['teamB'].get('set2', preset['teamB']['set3']),
+            preset['teamB']['set5'],
+        )
     if preset.get('h2h'):
         logger.info(
             '  - H2H stats: %s-%s',

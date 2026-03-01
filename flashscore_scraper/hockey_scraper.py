@@ -1,8 +1,8 @@
 """
 FlashScore Hockey Scraper
 
-Scrapes hockey matches and per-team last-15 goal statistics from FlashScore.
-Goal categorization: <=4 goals, <=5 goals, =6 goals, >=7 goals.
+Scrapes hockey matches and per-team raw last-15 total goals from FlashScore.
+Returns a list of up to 15 total-goal values per team (e.g. [5, 7, 3, 6, ...]).
 Sport-specific logic only — shared infrastructure lives in base_scraper.
 """
 
@@ -10,7 +10,7 @@ import asyncio
 import logging
 from typing import TypedDict
 
-from playwright.async_api import ElementHandle, Page
+from playwright.async_api import Page
 
 from .base_scraper import (
     BASE_URL,
@@ -45,14 +45,6 @@ HOCKEY_SELECTORS = build_selectors(
 
 
 # ── TypedDicts ────────────────────────────────────────────────────────
-# count2 = <=4 goals, count3 = <=5 goals, count4 = =6 goals, count5 = >=7 goals
-
-
-class GoalStats(TypedDict):
-    count2: int  # <=4 goals
-    count3: int  # <=5 goals
-    count4: int  # =6 goals
-    count5: int  # >=7 goals
 
 
 class HockeyMatch(Match):
@@ -60,8 +52,8 @@ class HockeyMatch(Match):
 
 
 class HockeyMatchStats(TypedDict):
-    teamAStats: GoalStats
-    teamBStats: GoalStats
+    teamAScores: list[int]  # Raw total goals per match (up to 15 values)
+    teamBScores: list[int]
 
 
 class HockeyMatchWithStats(HockeyMatch, HockeyMatchStats):
@@ -120,19 +112,17 @@ def parse_hockey_score(text: str) -> tuple[int | None, int | None]:
     return None, None
 
 
-async def count_goals_in_section(section: ElementHandle, max_matches: int = 15) -> GoalStats:
-    """Count goal distribution from an H2H section.
+async def collect_scores_in_section(section, max_matches: int = 15) -> list[int]:
+    """Collect raw total-goal values from an H2H section.
 
-    Categorizes: <=4 goals (count2), <=5 goals (count3), =6 goals (count4),
-    >=7 goals (count5).  count2 is cumulative (subset of count3).
-    Stops after max_matches (default 15).
+    Returns a list of total goals per match (up to max_matches, default 15).
+    Example: [5, 7, 3, 6, 4, ...].
     """
     rows = await section.query_selector_all(HOCKEY_SELECTORS['h2h']['row'])
-    count2, count3, count4, count5 = 0, 0, 0, 0
-    processed = 0
+    scores: list[int] = []
 
     for row in rows:
-        if processed >= max_matches:
+        if len(scores) >= max_matches:
             break
         try:
             result_el = await row.query_selector(HOCKEY_SELECTORS['h2h']['result'])
@@ -147,21 +137,11 @@ async def count_goals_in_section(section: ElementHandle, max_matches: int = 15) 
             if goals_a is None or goals_b is None:
                 continue
 
-            total_goals = goals_a + goals_b
-            processed += 1
-
-            if total_goals <= 4:
-                count2 += 1
-            if total_goals <= 5:
-                count3 += 1
-            elif total_goals == 6:
-                count4 += 1
-            else:  # >= 7
-                count5 += 1
+            scores.append(goals_a + goals_b)
         except Exception:
             pass
 
-    return {'count2': count2, 'count3': count3, 'count4': count4, 'count5': count5}
+    return scores
 
 
 # ── Hockey-specific H2H logic ───────────────────────────────────────
@@ -170,11 +150,12 @@ async def count_goals_in_section(section: ElementHandle, max_matches: int = 15) 
 async def scrape_hockey_h2h_stats(
     page: Page, h2h_url: str, team_a: str = '', team_b: str = ''
 ) -> HockeyMatchStats:
-    """Scrape per-team last-15 goal stats for a hockey match.
+    """Scrape per-team last-15 raw total goals for a hockey match.
 
     Skips the "confrontation directe" section — only processes per-team sections.
+    Returns lists of up to 15 total-goal values per team.
     """
-    default_stats: GoalStats = {'count2': 0, 'count3': 0, 'count4': 0, 'count5': 0}
+    default_scores: list[int] = []
 
     try:
         await goto_with_retry(page, h2h_url)
@@ -202,10 +183,10 @@ async def scrape_hockey_h2h_stats(
                     'H2H page still has 0 sections after retry for %s vs %s',
                     team_a, team_b,
                 )
-                return {'teamAStats': default_stats, 'teamBStats': default_stats}
+                return {'teamAScores': default_scores, 'teamBScores': default_scores}
 
-        team_a_stats = default_stats.copy()
-        team_b_stats = default_stats.copy()
+        team_a_scores: list[int] = []
+        team_b_scores: list[int] = []
 
         team_a_lower = team_a.lower()
         team_b_lower = team_b.lower()
@@ -230,13 +211,13 @@ async def scrape_hockey_h2h_stats(
                 matched_h2h = True
                 continue  # Skip H2H section for hockey
 
-            stats = await count_goals_in_section(section, max_matches=15)
+            scores = await collect_scores_in_section(section, max_matches=15)
 
             if team_a_lower and team_a_lower in title:
-                team_a_stats = stats
+                team_a_scores = scores
                 matched_a = True
             elif team_b_lower and team_b_lower in title:
-                team_b_stats = stats
+                team_b_scores = scores
                 matched_b = True
 
         # Fallback: assign by standard order
@@ -257,12 +238,12 @@ async def scrape_hockey_h2h_stats(
                 unmatched_sections = unmatched_sections[1:]
 
             for _idx, section in unmatched_sections:
-                stats = await count_goals_in_section(section, max_matches=15)
+                scores = await collect_scores_in_section(section, max_matches=15)
                 if not matched_a:
-                    team_a_stats = stats
+                    team_a_scores = scores
                     matched_a = True
                 elif not matched_b:
-                    team_b_stats = stats
+                    team_b_scores = scores
                     matched_b = True
 
         if not matched_a or not matched_b:
@@ -273,10 +254,10 @@ async def scrape_hockey_h2h_stats(
                 len(sections), section_titles,
             )
 
-        return {'teamAStats': team_a_stats, 'teamBStats': team_b_stats}
+        return {'teamAScores': team_a_scores, 'teamBScores': team_b_scores}
     except Exception as e:
         logger.error('Error scraping hockey stats for %s: %s', h2h_url, e)
-        return {'teamAStats': default_stats, 'teamBStats': default_stats}
+        return {'teamAScores': default_scores, 'teamBScores': default_scores}
 
 
 # ── Entry point ──────────────────────────────────────────────────────
@@ -289,8 +270,8 @@ async def scrape_hockey(days_offset: int = 0) -> list[HockeyMatchWithStats]:
         days_offset: Number of days from today to scrape.
     """
     default_stats = {
-        'teamAStats': {'count2': 0, 'count3': 0, 'count4': 0, 'count5': 0},
-        'teamBStats': {'count2': 0, 'count3': 0, 'count4': 0, 'count5': 0},
+        'teamAScores': [],
+        'teamBScores': [],
     }
     validation_checks = {
         'match rows': HOCKEY_SELECTORS['matches']['all_items'],

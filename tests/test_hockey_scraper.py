@@ -55,66 +55,32 @@ class TestParseHockeyScore:
         assert parse_hockey_score('63') == (6, 3)
 
 
-class TestGoalCategorization:
-    """Test the categorization logic: <=4, <=5, =6, >=7 total goals."""
+class TestRawScoreTotals:
+    """Test that parsed scores produce correct total-goal values."""
 
-    def test_under_four_goals(self):
-        # 2+1=3 total goals → <=4 and <=5
-        a, b = parse_hockey_score('2:1')
-        total = a + b
-        assert total <= 4
-        assert total <= 5
+    def test_low_scoring(self):
+        a, b = parse_hockey_score('1:2')
+        assert a + b == 3
 
-    def test_exactly_four_goals(self):
-        # 3+1=4 total goals → <=4 and <=5
-        a, b = parse_hockey_score('3:1')
-        total = a + b
-        assert total <= 4
-        assert total <= 5
-
-    def test_exactly_five_goals(self):
-        # 3+2=5 → <=5 but NOT <=4
+    def test_medium_scoring(self):
         a, b = parse_hockey_score('3:2')
-        total = a + b
-        assert total > 4
-        assert total <= 5
+        assert a + b == 5
 
-    def test_exactly_six_goals(self):
-        # 4+2=6 total goals → =6
-        a, b = parse_hockey_score('4:2')
-        total = a + b
-        assert total == 6
-
-    def test_seven_or_more_goals(self):
-        # 5+3=8 total goals → >=7
+    def test_high_scoring(self):
         a, b = parse_hockey_score('5:3')
-        total = a + b
-        assert total >= 7
+        assert a + b == 8
 
-    def test_four_goals_boundary(self):
-        # 2+2=4 → <=4 category
-        a, b = parse_hockey_score('2:2')
-        total = a + b
-        assert total <= 4
+    def test_zero_zero(self):
+        a, b = parse_hockey_score('0:0')
+        assert a + b == 0
 
-    def test_five_goals_boundary(self):
-        # 3+2=5 → <=5 but not <=4
-        a, b = parse_hockey_score('3:2')
-        total = a + b
-        assert total <= 5
-        assert total > 4
+    def test_overtime_score(self):
+        a, b = parse_hockey_score('3:2 OT')
+        assert a + b == 5
 
-    def test_six_goals_boundary(self):
-        # 3+3=6 → =6 category
-        a, b = parse_hockey_score('3:3')
-        total = a + b
-        assert total == 6
-
-    def test_seven_goals_boundary(self):
-        # 4+3=7 → >=7 category
-        a, b = parse_hockey_score('4:3')
-        total = a + b
-        assert total >= 7
+    def test_shootout_score(self):
+        a, b = parse_hockey_score('4:3 SO')
+        assert a + b == 7
 
 
 class TestDetectSexe:

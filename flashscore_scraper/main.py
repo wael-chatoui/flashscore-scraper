@@ -78,19 +78,18 @@ def print_summary(match_data: list[dict[str, Any]], sport: str = 'volleyball') -
         print('\nSample match:')
         print(f'  {sample.get("teamA", "")} vs {sample.get("teamB", "")}')
         print(f'  Date: {sample.get("date", "")} {sample.get("time", "")}')
-        team_a_stats = sample.get('teamAStats', {})
-        team_b_stats = sample.get('teamBStats', {})
-        c3, c4, c5 = (team_a_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
         if sport == 'hockey':
-            print(f'  Team A goals: <=5={c3}, =6={c4}, >=7={c5}')
+            a_scores = sample.get('teamAScores', [])
+            b_scores = sample.get('teamBScores', [])
+            print(f'  Team A scores ({len(a_scores)}): {a_scores[:5]}...')
+            print(f'  Team B scores ({len(b_scores)}): {b_scores[:5]}...')
         else:
+            team_a_stats = sample.get('teamAStats', {})
+            team_b_stats = sample.get('teamBStats', {})
+            c3, c4, c5 = (team_a_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
             print(f'  Team A sets: 3={c3}, 4={c4}, 5={c5}')
-        c3, c4, c5 = (team_b_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
-        if sport == 'hockey':
-            print(f'  Team B goals: <=5={c3}, =6={c4}, >=7={c5}')
-        else:
+            c3, c4, c5 = (team_b_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
             print(f'  Team B sets: 3={c3}, 4={c4}, 5={c5}')
-        if sport != 'hockey':
             h2h_stats = sample.get('h2hStats', {})
             c3, c4, c5 = (h2h_stats.get(k, 0) for k in ('count3', 'count4', 'count5'))
             print(f'  H2H sets: 3={c3}, 4={c4}, 5={c5}')
@@ -177,17 +176,10 @@ async def main() -> None:
             logger.info('Your scraped data has been saved to JSON file.')
             return
 
-        # Hockey uses HOCKEY UND preset and separate spreadsheet
-        if is_hockey and config.sheets.preset not in ('HOCKEY UND',):
-            config.sheets.preset = 'HOCKEY UND'
+        # Hockey uses HOCKEY RAW preset and separate spreadsheet
+        if is_hockey and config.sheets.preset not in ('HOCKEY RAW',):
+            config.sheets.preset = 'HOCKEY RAW'
         hockey_sheet_id = config.google.hockey_spreadsheet_id if is_hockey else None
-
-        # Detect sexe (H/F) for hockey matches based on league name
-        if is_hockey:
-            from .hockey_scraper import detect_sexe
-
-            for m in match_data:
-                m['sexe'] = detect_sexe(m.get('league', ''))
 
         inject_to_google_sheets(
             match_data, config.sheets.start_row, spreadsheet_id=hockey_sheet_id

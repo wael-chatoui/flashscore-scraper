@@ -53,7 +53,7 @@ services:
       - MAX_MATCHES=0
 
       # Sheet configuration
-      - SHEET_PRESET=HOCKEY UND
+      - SHEET_PRESET=HOCKEY RAW
       - SHEET_TAB_NAME=${HOCKEY_SHEET_TAB_NAME:-}
       - START_ROW=${START_ROW:-2}
 
