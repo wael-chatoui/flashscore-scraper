@@ -49,7 +49,7 @@ services:
       # Scraper settings
       - SPORT=hockey
       - HEADLESS=true
-      - REQUEST_DELAY=1000
+      - REQUEST_DELAY=2000
       - MAX_MATCHES=0
 
       # Sheet configuration

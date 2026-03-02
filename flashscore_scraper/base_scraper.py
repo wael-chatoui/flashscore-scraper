@@ -6,7 +6,10 @@ standings, rankings, date navigation, and the main scraper pipeline.
 """
 
 import asyncio
+import json
 import logging
+import os
+import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any, TypedDict
@@ -19,6 +22,14 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_DELAY_S = 2
+PER_MATCH_TIMEOUT_S = 90       # seconds per match H2H scraping
+GLOBAL_TIMEOUT_S = 2 * 3600    # 2 hours total for match processing loop
+PARTIAL_SAVE_INTERVAL = 25     # save partial results every N matches
+MAX_SHOW_MORE_CLICKS = 30      # cap show-more button clicks to prevent infinite loops
+BATCH_SIZE = 50                # pause after every N matches
+BATCH_COOLDOWN_S = 60          # seconds to pause between batches
+CONSECUTIVE_EMPTY_LIMIT = 5    # trigger cooldown after N consecutive empty results
+RATE_LIMIT_COOLDOWN_S = 90     # seconds to wait when rate-limited
 
 BASE_URL = 'https://www.flashscore.fr'
 
@@ -149,19 +160,29 @@ def find_team_rank(team_name: str, standings: dict[str, int]) -> str:
     return ''
 
 
-async def click_show_more_buttons(page: Page) -> None:
+async def click_show_more_buttons(page: Page, max_clicks: int = MAX_SHOW_MORE_CLICKS) -> None:
     """Click all "Montrer plus" buttons to reveal hidden matches."""
     selector = _SHARED_SELECTORS['h2h']['show_more_btn']
     clicked = True
+    total_clicks = 0
     while clicked:
+        if total_clicks >= max_clicks:
+            logger.warning(
+                'Reached max show-more clicks (%d) — stopping to prevent infinite loop',
+                max_clicks,
+            )
+            break
         clicked = False
         buttons = await page.query_selector_all(selector)
         for btn in buttons:
+            if total_clicks >= max_clicks:
+                break
             try:
                 is_visible = await btn.is_visible()
                 if is_visible:
                     await btn.click()
                     clicked = True
+                    total_clicks += 1
                     await page.wait_for_timeout(300)
             except Exception:
                 pass
@@ -418,6 +439,23 @@ async def validate_page_selectors(page: Page, sport_url: str, checks: dict[str, 
         logger.warning('[selector-check] Could not validate selectors: %s', e)
 
 
+# ── Rate-limit detection ─────────────────────────────────────────────
+
+
+def _stats_are_empty(stats: dict[str, Any]) -> bool:
+    """Check if scraped stats are empty (likely rate-limited).
+
+    Handles both dict-based stats (volleyball: all-zero count dicts)
+    and list-based stats (hockey: empty teamAScores/teamBScores).
+    """
+    for v in stats.values():
+        if isinstance(v, list) and len(v) == 0:
+            return True  # hockey: empty score lists
+        if isinstance(v, dict) and all(val == 0 for val in v.values()):
+            return True  # volleyball: all-zero count dicts
+    return False
+
+
 # ── Orchestration ────────────────────────────────────────────────────
 
 
@@ -471,6 +509,7 @@ async def run_scraper(
     scrape_match_stats: Callable,
     default_stats: dict[str, Any],
     validation_checks: dict[str, str],
+    output_dir: str | None = None,
 ) -> list[dict[str, Any]]:
     """Full scraper pipeline: browser → validate → extract → standings → rankings → stats.
 
@@ -518,7 +557,36 @@ async def run_scraper(
             max_matches = config.scraper.max_matches or len(matches)
             matches_to_process = matches[:max_matches] if max_matches > 0 else matches
 
+            # Setup for partial saves
+            if output_dir is None:
+                _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                output_dir = os.path.join(_project_root, 'output')
+
+            def save_partial(data: list[dict[str, Any]]) -> None:
+                """Save intermediate results to a partial JSON file."""
+                os.makedirs(output_dir, exist_ok=True)
+                partial_file = os.path.join(
+                    output_dir,
+                    f'{sport_name}_partial_{target_date.strftime("%Y-%m-%d")}.json',
+                )
+                with open(partial_file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                logger.info('Saved %d partial results to %s', len(data), partial_file)
+
+            start_time = time.monotonic()
+            consecutive_empty = 0
+
             for i, match in enumerate(matches_to_process):
+                # Global timeout: stop after GLOBAL_TIMEOUT_S to prevent 12h+ runs
+                elapsed = time.monotonic() - start_time
+                if elapsed >= GLOBAL_TIMEOUT_S:
+                    logger.warning(
+                        'Global timeout reached (%.0fs / %ds) after %d/%d matches '
+                        '— returning partial results',
+                        elapsed, GLOBAL_TIMEOUT_S, i, len(matches_to_process),
+                    )
+                    break
+
                 n = f'{i + 1}/{len(matches_to_process)}'
                 logger.info('Processing match %s: %s vs %s', n, match['teamA'], match['teamB'])
 
@@ -530,26 +598,32 @@ async def run_scraper(
                             scrape_match_stats(
                                 page, match['matchUrl'], match['teamA'], match['teamB']
                             ),
-                            timeout=120,
+                            timeout=PER_MATCH_TIMEOUT_S,
                         )
                     except asyncio.TimeoutError:
                         logger.warning(
-                            'Timeout (120s) scraping match %s: %s vs %s (%s) — using default stats',
-                            n, match['teamA'], match['teamB'], match['matchUrl'],
+                            'Timeout (%ds) scraping match %s: %s vs %s (%s) — using default stats',
+                            PER_MATCH_TIMEOUT_S, n, match['teamA'], match['teamB'],
+                            match['matchUrl'],
                         )
                         stats = default_stats
-                    # Warn if all returned stats are zero (possible rate-limit)
-                    all_zero = all(
-                        v == 0
-                        for group in stats.values()
-                        if isinstance(group, dict)
-                        for v in group.values()
-                    )
-                    if all_zero:
+                    # Check for empty/zero stats (possible rate-limit)
+                    if _stats_are_empty(stats):
                         logger.warning(
-                            'All stats are 0 for match %s: %s vs %s (%s)',
+                            'Empty stats for match %s: %s vs %s (%s)',
                             n, match['teamA'], match['teamB'], match['matchUrl'],
                         )
+                        consecutive_empty += 1
+                        if consecutive_empty >= CONSECUTIVE_EMPTY_LIMIT:
+                            logger.warning(
+                                'Rate-limit detected: %d consecutive empty results '
+                                '— cooling down %ds',
+                                consecutive_empty, RATE_LIMIT_COOLDOWN_S,
+                            )
+                            await page.wait_for_timeout(RATE_LIMIT_COOLDOWN_S * 1000)
+                            consecutive_empty = 0
+                    else:
+                        consecutive_empty = 0
                     results.append({**match_data, **stats})
                 else:
                     logger.warning(
@@ -558,7 +632,23 @@ async def run_scraper(
                     )
                     results.append({**match_data, **default_stats})
 
+                # Save partial results periodically
+                if len(results) % PARTIAL_SAVE_INTERVAL == 0:
+                    save_partial(results)
+
                 await page.wait_for_timeout(config.scraper.request_delay)
+
+                # Batch cooldown: pause after every BATCH_SIZE matches
+                if (i + 1) % BATCH_SIZE == 0 and i + 1 < len(matches_to_process):
+                    logger.info(
+                        'Batch cooldown: pausing %ds after %d matches...',
+                        BATCH_COOLDOWN_S, i + 1,
+                    )
+                    await page.wait_for_timeout(BATCH_COOLDOWN_S * 1000)
+
+            # Save final partial results (useful if loop broke early or on completion)
+            if results:
+                save_partial(results)
 
             return results
         finally:

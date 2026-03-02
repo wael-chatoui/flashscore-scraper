@@ -169,10 +169,10 @@ async def scrape_hockey_h2h_stats(
         # Rate-limit mitigation: if no sections found, wait and retry once
         if not sections:
             logger.warning(
-                'H2H page has 0 sections for %s vs %s — retrying in 5s (%s)',
+                'H2H page has 0 sections for %s vs %s — retrying in 15s (%s)',
                 team_a, team_b, h2h_url,
             )
-            await page.wait_for_timeout(5000)
+            await page.wait_for_timeout(15000)
             await page.reload(wait_until='domcontentloaded')
             await page.wait_for_timeout(3000)
             await click_show_more_buttons(page)
