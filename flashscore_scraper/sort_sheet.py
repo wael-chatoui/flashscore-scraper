@@ -10,6 +10,7 @@ Usage:
 
 import logging
 import os
+import re
 import sys
 
 from .sheets import (
@@ -36,11 +37,26 @@ def get_spreadsheet_id() -> str:
 col_to_index = _col_to_index
 
 
+def _clean_date(value: str) -> str:
+    """Fix common date issues: trailing quotes, 2-digit years.
+
+    '04/02/26"' → '04/02/2026'
+    '27/02/2026' → '27/02/2026' (unchanged)
+    """
+    v = value.strip().rstrip('"')
+    # Convert 2-digit year to 4-digit: dd/mm/yy → dd/mm/20yy
+    m = re.match(r'^(\d{2}/\d{2}/)(\d{2})$', v)
+    if m:
+        v = m.group(1) + '20' + m.group(2)
+    return v
+
+
 def normalize_dates(sheets, spreadsheet_id: str, sheet_id: int, date_col: str) -> None:
     """
     Re-write date column with USER_ENTERED so text dates become real date values.
     This ensures SortRange sorts chronologically, not alphabetically.
     Only touches column A (date column), preserves all other columns/formulas.
+    Also fixes trailing quotes and 2-digit years from earlier scraping runs.
     """
     values = _read_values(
         sheets,
@@ -54,6 +70,10 @@ def normalize_dates(sheets, spreadsheet_id: str, sheet_id: int, date_col: str) -
         return
 
     col_values = values[0]
+    cleaned = [_clean_date(v) for v in col_values]
+    fixed = sum(1 for old, new in zip(col_values, cleaned) if old != new)
+    if fixed:
+        logger.info('  Fixed %d malformed dates (trailing quotes / 2-digit years)', fixed)
     # Write back only the date column with USER_ENTERED to convert text→date
     _write_values(
         sheets,
@@ -64,11 +84,11 @@ def normalize_dates(sheets, spreadsheet_id: str, sheet_id: int, date_col: str) -
                 'start_col': date_col,
                 'end_col': date_col,
                 'start_row': 2,
-                'values': [[v] for v in col_values],
+                'values': [[v] for v in cleaned],
             }
         ],
     )
-    logger.info('  Normalized %d date values in column %s', len(col_values), date_col)
+    logger.info('  Normalized %d date values in column %s', len(cleaned), date_col)
 
 
 def delete_blank_rows(sheets, spreadsheet_id: str, sheet_id: int, date_col: str) -> None:
