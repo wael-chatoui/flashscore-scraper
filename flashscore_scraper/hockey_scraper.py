@@ -233,9 +233,9 @@ async def scrape_hockey_h2h_stats(
                 unmatched_sections.append((i, section))
 
             # When all titles are empty and we have 3 sections,
-            # skip the first (confrontation directe), use 2nd and 3rd
+            # skip the last (confrontation directe), use 1st and 2nd
             if len(sections) == 3 and not matched_h2h and all(t == '' for t in section_titles):
-                unmatched_sections = unmatched_sections[1:]
+                unmatched_sections = unmatched_sections[:-1]
 
             for _idx, section in unmatched_sections:
                 scores = await collect_scores_in_section(section, max_matches=15)
