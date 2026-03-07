@@ -59,7 +59,7 @@ export GOOGLE_CREDENTIALS_PATH="${GOOGLE_CREDENTIALS_PATH:-$PROJECT_DIR/credenti
 # Run the hockey scraper
 log "Running hockey scraper..."
 cd "$PROJECT_DIR"
-python -m flashscore_scraper --sport=hockey 2>&1 | tee -a "$LOG_FILE"
+python -m flashscore_scraper --sport=hockey --days=1 2>&1 | tee -a "$LOG_FILE"
 
 EXIT_CODE=${PIPESTATUS[0]}
 
