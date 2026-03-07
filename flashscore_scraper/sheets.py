@@ -503,6 +503,13 @@ def inject_to_google_sheets(
     preset = get_column_preset()
     sheet_name = config.sheets.tab_name or preset['sheetName']
 
+    # Filter out matches with empty team names (defensive guard)
+    original_count = len(match_data)
+    match_data = [m for m in match_data if m.get('teamA', '').strip() and m.get('teamB', '').strip()]
+    filtered = original_count - len(match_data)
+    if filtered:
+        logger.warning('Filtered out %d matches with empty team names', filtered)
+
     logger.info('Injecting %d matches into "%s"...', len(match_data), sheet_name)
     logger.info('Using column preset: %s', config.sheets.preset or 'ORIGINAL')
 

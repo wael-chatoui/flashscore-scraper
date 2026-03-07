@@ -25,6 +25,16 @@ from .sheets import (
 logger = logging.getLogger(__name__)
 
 
+def _index_to_col(index: int) -> str:
+    """Convert 0-based column index to letter (inverse of _col_to_index)."""
+    result = ''
+    index += 1  # convert to 1-based
+    while index > 0:
+        index, remainder = divmod(index - 1, 26)
+        result = chr(ord('A') + remainder) + result
+    return result
+
+
 def get_spreadsheet_id() -> str:
     """Get SPREADSHEET_ID from environment"""
     spreadsheet_id = os.getenv('SPREADSHEET_ID')
@@ -91,29 +101,64 @@ def normalize_dates(sheets, spreadsheet_id: str, sheet_id: int, date_col: str) -
     logger.info('  Normalized %d date values in column %s', len(cleaned), date_col)
 
 
-def delete_blank_rows(sheets, spreadsheet_id: str, sheet_id: int, date_col: str) -> None:
-    """Delete rows where the date column and all match info columns (A-H) are empty."""
+def delete_blank_rows(
+    sheets, spreadsheet_id: str, sheet_id: int, date_col: str, preset_name: str = 'ORIGINAL',
+) -> None:
+    """Delete rows that are blank or incomplete (date only, no team names).
+
+    A row is considered deletable if:
+    - All cells in the read range are empty (fully blank), OR
+    - It has a date but both team name columns are empty (incomplete).
+    """
+    preset = COLUMN_PRESETS.get(preset_name, COLUMN_PRESETS['ORIGINAL'])
+    match_info = preset.get('matchInfo') or {}
+
+    # Determine team column indices (relative to start of read range, which is col A = 0)
+    team_a_col = match_info.get('teamA', 'E')
+    team_b_col = match_info.get('teamB', 'G')
+    team_a_idx = _col_to_index(team_a_col)
+    team_b_idx = _col_to_index(team_b_col)
+    date_idx = _col_to_index(date_col)
+
+    # Extend read range to cover team columns (may be beyond H)
+    max_col_idx = max(7, team_a_idx, team_b_idx)  # 7 = column H (0-based)
+    end_col = _index_to_col(max_col_idx)
+
     rows = _read_values(
         sheets,
         spreadsheet_id,
         sheet_id,
         'A',
-        'H',
+        end_col,
         start_row=2,
         major_dimension='ROWS',
     )
 
-    # Find blank row ranges (where A-H are all empty), work bottom-up
+    def _cell(row: list, idx: int) -> str:
+        return row[idx].strip() if idx < len(row) else ''
+
+    # Find deletable row ranges, work bottom-up
     blank_ranges = []
     i = len(rows) - 1
     while i >= 0:
         row = rows[i]
         is_blank = not any(cell.strip() for cell in row) if row else True
+        # Incomplete: has date but both team columns empty
+        if not is_blank and row:
+            has_date = bool(_cell(row, date_idx))
+            no_teams = not _cell(row, team_a_idx) and not _cell(row, team_b_idx)
+            if has_date and no_teams:
+                is_blank = True
         if is_blank:
             end = i
             while i >= 0:
                 row = rows[i]
                 is_blank = not any(cell.strip() for cell in row) if row else True
+                if not is_blank and row:
+                    has_date = bool(_cell(row, date_idx))
+                    no_teams = not _cell(row, team_a_idx) and not _cell(row, team_b_idx)
+                    if has_date and no_teams:
+                        is_blank = True
                 if not is_blank:
                     break
                 i -= 1
@@ -124,11 +169,11 @@ def delete_blank_rows(sheets, spreadsheet_id: str, sheet_id: int, date_col: str)
             i -= 1
 
     if not blank_ranges:
-        logger.info('  No blank rows to delete')
+        logger.info('  No blank/incomplete rows to delete')
         return
 
     total_deleted = sum(end - start + 1 for start, end in blank_ranges)
-    logger.info('  Deleting %d blank rows in %d range(s)', total_deleted, len(blank_ranges))
+    logger.info('  Deleting %d blank/incomplete rows in %d range(s)', total_deleted, len(blank_ranges))
 
     # Build delete requests (already bottom-up so indices stay valid)
     requests = []
@@ -192,7 +237,7 @@ def sort_sheet_by_date(
 
     # Step 1: Delete blank rows
     logger.info('  Cleaning up blank rows...')
-    delete_blank_rows(sheets, spreadsheet_id, sheet_id, date_col)
+    delete_blank_rows(sheets, spreadsheet_id, sheet_id, date_col, preset_name)
 
     # Step 2: Normalize dates so text dates become real date serial values
     logger.info('  Normalizing dates for correct sort order...')
