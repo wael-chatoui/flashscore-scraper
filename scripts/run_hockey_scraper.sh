@@ -57,16 +57,21 @@ fi
 export GOOGLE_CREDENTIALS_PATH="${GOOGLE_CREDENTIALS_PATH:-$PROJECT_DIR/credentials.json}"
 
 # Run the hockey scraper
-log "Running hockey scraper..."
+log "Running hockey scraper for today (safety net)..."
 cd "$PROJECT_DIR"
+python -m flashscore_scraper --sport=hockey --days=0 2>&1 | tee -a "$LOG_FILE"
+EXIT_TODAY=${PIPESTATUS[0]}
+
+log "Running hockey scraper for tomorrow..."
 python -m flashscore_scraper --sport=hockey --days=1 2>&1 | tee -a "$LOG_FILE"
+EXIT_TOMORROW=${PIPESTATUS[0]}
 
-EXIT_CODE=${PIPESTATUS[0]}
-
-if [ $EXIT_CODE -eq 0 ]; then
-    log "Hockey scraper completed successfully"
+if [ $EXIT_TODAY -eq 0 ] && [ $EXIT_TOMORROW -eq 0 ]; then
+    log "Hockey scraper completed successfully (today + tomorrow)"
+    EXIT_CODE=0
 else
-    log "ERROR: Hockey scraper failed with exit code $EXIT_CODE"
+    log "ERROR: Hockey scraper failed (today=$EXIT_TODAY, tomorrow=$EXIT_TOMORROW)"
+    EXIT_CODE=1
 fi
 
 log "=========================================="

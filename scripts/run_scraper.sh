@@ -57,16 +57,21 @@ fi
 export GOOGLE_CREDENTIALS_PATH="${GOOGLE_CREDENTIALS_PATH:-$PROJECT_DIR/credentials.json}"
 
 # Run the scraper
-log "Running scraper..."
+log "Running scraper for today (safety net)..."
 cd "$PROJECT_DIR"
+python -m flashscore_scraper --days=0 2>&1 | tee -a "$LOG_FILE"
+EXIT_TODAY=${PIPESTATUS[0]}
+
+log "Running scraper for tomorrow..."
 python -m flashscore_scraper --days=1 2>&1 | tee -a "$LOG_FILE"
+EXIT_TOMORROW=${PIPESTATUS[0]}
 
-EXIT_CODE=${PIPESTATUS[0]}
-
-if [ $EXIT_CODE -eq 0 ]; then
-    log "Scraper completed successfully"
+if [ $EXIT_TODAY -eq 0 ] && [ $EXIT_TOMORROW -eq 0 ]; then
+    log "Scraper completed successfully (today + tomorrow)"
+    EXIT_CODE=0
 else
-    log "ERROR: Scraper failed with exit code $EXIT_CODE"
+    log "ERROR: Scraper failed (today=$EXIT_TODAY, tomorrow=$EXIT_TOMORROW)"
+    EXIT_CODE=1
 fi
 
 log "=========================================="

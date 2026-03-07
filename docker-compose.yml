@@ -2,7 +2,7 @@ services:
   scraper:
     build: .
     container_name: flashscore-volleyball-scraper
-    command: ["python", "-m", "flashscore_scraper", "--days=1"]
+    command: ["sh", "-c", "python -m flashscore_scraper --days=0 && python -m flashscore_scraper --days=1"]
     environment:
       # Google Sheets configuration
       - SPREADSHEET_ID=${SPREADSHEET_ID}
@@ -40,7 +40,7 @@ services:
   hockey-scraper:
     build: .
     container_name: flashscore-hockey-scraper
-    command: ["python", "-m", "flashscore_scraper", "--sport=hockey", "--days=1"]
+    command: ["sh", "-c", "python -m flashscore_scraper --sport=hockey --days=0 && python -m flashscore_scraper --sport=hockey --days=1"]
     environment:
       # Google Sheets configuration
       - SPREADSHEET_ID=${SPREADSHEET_ID}
