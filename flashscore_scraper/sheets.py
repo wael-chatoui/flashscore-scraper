@@ -674,20 +674,19 @@ def inject_to_google_sheets(
             }
         )
 
-    # Team A stats — aggregated counts (0 = no data available, keeps formulas working)
+    def _stat_values(stats: dict, keys: list[str]) -> list:
+        """Return stat values, but use empty strings when all values are 0 (no data)."""
+        vals = [stats.get(k, 0) for k in keys]
+        if all(v == 0 for v in vals):
+            return [''] * len(vals)
+        return vals
+
+    # Team A stats — aggregated counts ('' when no data scraped)
     if preset.get('teamA'):
         has_set2_a = 'set2' in preset['teamA']
+        keys_a = (['count2'] if has_set2_a else []) + ['count3', 'count4', 'count5']
         team_a_values = [
-            [
-                *(
-                    [m.get('teamAStats', {}).get('count2', 0)]
-                    if has_set2_a
-                    else []
-                ),
-                m.get('teamAStats', {}).get('count3', 0),
-                m.get('teamAStats', {}).get('count4', 0),
-                m.get('teamAStats', {}).get('count5', 0),
-            ]
+            _stat_values(m.get('teamAStats', {}), keys_a)
             for m in match_data
         ]
         write_data.append(
@@ -699,20 +698,12 @@ def inject_to_google_sheets(
             }
         )
 
-    # Team B stats — aggregated counts (0 = no data available, keeps formulas working)
+    # Team B stats — aggregated counts ('' when no data scraped)
     if preset.get('teamB'):
         has_set2_b = 'set2' in preset['teamB']
+        keys_b = (['count2'] if has_set2_b else []) + ['count3', 'count4', 'count5']
         team_b_values = [
-            [
-                *(
-                    [m.get('teamBStats', {}).get('count2', 0)]
-                    if has_set2_b
-                    else []
-                ),
-                m.get('teamBStats', {}).get('count3', 0),
-                m.get('teamBStats', {}).get('count4', 0),
-                m.get('teamBStats', {}).get('count5', 0),
-            ]
+            _stat_values(m.get('teamBStats', {}), keys_b)
             for m in match_data
         ]
         write_data.append(
@@ -727,11 +718,7 @@ def inject_to_google_sheets(
     # H2H stats (skip when preset has no h2h, e.g. hockey)
     if preset.get('h2h'):
         h2h_values = [
-            [
-                m.get('h2hStats', {}).get('count3', 0),
-                m.get('h2hStats', {}).get('count4', 0),
-                m.get('h2hStats', {}).get('count5', 0),
-            ]
+            _stat_values(m.get('h2hStats', {}), ['count3', 'count4', 'count5'])
             for m in match_data
         ]
         write_data.append(
