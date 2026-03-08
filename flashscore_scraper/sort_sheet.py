@@ -137,30 +137,22 @@ def delete_blank_rows(
     def _cell(row: list, idx: int) -> str:
         return row[idx].strip() if idx < len(row) else ''
 
+    def _is_deletable(row: list | None) -> bool:
+        """True if row is fully blank or has a date but no team names."""
+        if not row:
+            return True
+        if not any(cell.strip() for cell in row):
+            return True
+        # Incomplete: date present but both team columns empty
+        return bool(_cell(row, date_idx)) and not _cell(row, team_a_idx) and not _cell(row, team_b_idx)
+
     # Find deletable row ranges, work bottom-up
     blank_ranges = []
     i = len(rows) - 1
     while i >= 0:
-        row = rows[i]
-        is_blank = not any(cell.strip() for cell in row) if row else True
-        # Incomplete: has date but both team columns empty
-        if not is_blank and row:
-            has_date = bool(_cell(row, date_idx))
-            no_teams = not _cell(row, team_a_idx) and not _cell(row, team_b_idx)
-            if has_date and no_teams:
-                is_blank = True
-        if is_blank:
+        if _is_deletable(rows[i]):
             end = i
-            while i >= 0:
-                row = rows[i]
-                is_blank = not any(cell.strip() for cell in row) if row else True
-                if not is_blank and row:
-                    has_date = bool(_cell(row, date_idx))
-                    no_teams = not _cell(row, team_a_idx) and not _cell(row, team_b_idx)
-                    if has_date and no_teams:
-                        is_blank = True
-                if not is_blank:
-                    break
+            while i >= 0 and _is_deletable(rows[i]):
                 i -= 1
             start = i + 1
             # +2 because rows are 0-indexed from row 2
