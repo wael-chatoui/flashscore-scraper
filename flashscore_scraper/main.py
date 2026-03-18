@@ -188,6 +188,7 @@ async def main() -> None:
         # Sort sheet by date after injection
         logger.info('\n[3/4] Sorting sheet by date...\n')
         sort_sheet_by_date(
+            descending=True,
             preset_name=config.sheets.preset or 'ORIGINAL',
             spreadsheet_id=hockey_sheet_id,
         )
