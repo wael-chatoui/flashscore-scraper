@@ -121,6 +121,29 @@ COLUMN_PRESETS = {
         'teamB': None,
         'h2h': None,
     },
+    # Football RAW preset — writes raw total-goal values (20 per team)
+    # Columns N-AG: Team A's last 20 match total goals (AM1–AM20)
+    # Columns AH-BA: Team B's last 20 match total goals (BM1–BM20)
+    # No H2H, no aggregated stats — the sheet's own formulas handle computation
+    'FOOTBALL': {
+        'sheetName': 'SCRAPING UND 5.5/6',
+        'matchInfo': {
+            'date': 'A',
+            'time': 'B',
+            'country': 'C',
+            'league': 'D',
+            'teamA': 'E',
+            'rankA': 'F',
+            'teamB': 'G',
+            'rankB': 'H',
+            # I = ECART (formule), J-M = cotes (saisie manuelle) → NE PAS TOUCHER
+        },
+        'teamAScores': {'start': 'N', 'end': 'AG', 'count': 20},
+        'teamBScores': {'start': 'AH', 'end': 'BA', 'count': 20},
+        'teamA': None,
+        'teamB': None,
+        'h2h': None,
+    },
     # Alternative mapping based on CSV structure
     'CALCUL SET': {
         'sheetName': 'CALCUL SET',

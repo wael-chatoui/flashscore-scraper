@@ -47,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         '--sport',
-        choices=['volleyball', 'hockey'],
+        choices=['volleyball', 'hockey', 'football'],
         default=config.scraper.sport,
         help='Sport to scrape (default: from SPORT env var)',
     )
@@ -78,7 +78,7 @@ def print_summary(match_data: list[dict[str, Any]], sport: str = 'volleyball') -
         print('\nSample match:')
         print(f'  {sample.get("teamA", "")} vs {sample.get("teamB", "")}')
         print(f'  Date: {sample.get("date", "")} {sample.get("time", "")}')
-        if sport == 'hockey':
+        if sport in ('hockey', 'football'):
             a_scores = sample.get('teamAScores', [])
             b_scores = sample.get('teamBScores', [])
             print(f'  Team A scores ({len(a_scores)}): {a_scores[:5]}...')
@@ -104,11 +104,12 @@ async def main() -> None:
     sheets_only = args.sheets_only
     sport = args.sport
     is_hockey = sport == 'hockey'
+    is_football = sport == 'football'
     days_offset = 0 if args.today else args.days
     json_file = args.json_file
     target_date = datetime.now() + timedelta(days=days_offset)
 
-    sport_label = 'Hockey' if is_hockey else 'Volleyball'
+    sport_label = 'Hockey' if is_hockey else 'Football' if is_football else 'Volleyball'
     logger.info('=' * 50)
     logger.info('FlashScore %s Scraper', sport_label)
     logger.info('=' * 50)
@@ -132,6 +133,10 @@ async def main() -> None:
             from .hockey_scraper import scrape_hockey
 
             match_data = await scrape_hockey(days_offset=days_offset)
+        elif is_football:
+            from .football_scraper import scrape_football
+
+            match_data = await scrape_football(days_offset=days_offset)
         else:
             from .scraper import scrape_flashscore
 
@@ -143,7 +148,7 @@ async def main() -> None:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(project_root, 'output')
         os.makedirs(output_dir, exist_ok=True)
-        file_prefix = 'hockey_matches' if is_hockey else 'matches'
+        file_prefix = 'hockey_matches' if is_hockey else 'football_matches' if is_football else 'matches'
         output_file = os.path.join(
             output_dir, f'{file_prefix}_{target_date.strftime("%Y-%m-%d")}.json'
         )
@@ -179,10 +184,18 @@ async def main() -> None:
         # Hockey uses HOCKEY RAW preset and separate spreadsheet
         if is_hockey and config.sheets.preset not in ('HOCKEY RAW',):
             config.sheets.preset = 'HOCKEY RAW'
-        hockey_sheet_id = config.google.hockey_spreadsheet_id if is_hockey else None
+        # Football uses FOOTBALL preset and separate spreadsheet
+        if is_football and config.sheets.preset not in ('FOOTBALL',):
+            config.sheets.preset = 'FOOTBALL'
+
+        override_sheet_id = None
+        if is_hockey:
+            override_sheet_id = config.google.hockey_spreadsheet_id
+        elif is_football:
+            override_sheet_id = config.google.football_spreadsheet_id
 
         inject_to_google_sheets(
-            match_data, config.sheets.start_row, spreadsheet_id=hockey_sheet_id
+            match_data, config.sheets.start_row, spreadsheet_id=override_sheet_id
         )
 
         # Sort sheet by date after injection
@@ -190,15 +203,15 @@ async def main() -> None:
         sort_sheet_by_date(
             descending=True,
             preset_name=config.sheets.preset or 'ORIGINAL',
-            spreadsheet_id=hockey_sheet_id,
+            spreadsheet_id=override_sheet_id,
         )
 
-        # Inject formulas AFTER sorting (skip for hockey — client has own formulas)
-        if not is_hockey:
+        # Inject formulas AFTER sorting (skip for hockey/football — client has own formulas)
+        if not is_hockey and not is_football:
             logger.info('\n[4/4] Injecting formulas...\n')
             inject_original_formulas()
         else:
-            logger.info('\n[4/4] Skipping formula injection (hockey).\n')
+            logger.info('\n[4/4] Skipping formula injection (%s).\n', sport)
 
     print_summary(match_data, sport)
     logger.info('Done!')

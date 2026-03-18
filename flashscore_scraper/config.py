@@ -27,6 +27,11 @@ class GoogleConfig:
         default_factory=lambda: os.getenv('HOCKEY_SPREADSHEET_ID', '')
     )
 
+    # Separate spreadsheet for football (optional — falls back to SPREADSHEET_ID)
+    football_spreadsheet_id: str = field(
+        default_factory=lambda: os.getenv('FOOTBALL_SPREADSHEET_ID', '')
+    )
+
     # Path to Google service account credentials JSON file
     # Download from Google Cloud Console > APIs & Services > Credentials
     credentials_path: str = field(
