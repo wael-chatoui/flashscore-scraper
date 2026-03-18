@@ -115,7 +115,9 @@ async def main():
             parser.error('--from and --to are required when not using --inject-only')
 
         total_days = to_days - from_days + 1
-        logger.info('Batch scrape (%s): %d days (J%+d to J%+d)', sport, total_days, from_days, to_days)
+        logger.info(
+            'Batch scrape (%s): %d days (J%+d to J%+d)', sport, total_days, from_days, to_days
+        )
         logger.info('Mode: %s', 'scrape only' if scrape_only else 'scrape + inject')
 
         # Phase 1: Scrape all days to JSON

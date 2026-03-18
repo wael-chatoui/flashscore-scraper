@@ -127,7 +127,11 @@ async def main() -> None:
     # Step 1: Scrape data (unless sheets-only mode)
     if not sheets_only:
         date_str = target_date.strftime('%d/%m/%Y')
-        logger.info('\n[1/4] Scraping FlashScore %s matches for %s...\n', sport_label.lower(), date_str)
+        logger.info(
+            '\n[1/4] Scraping FlashScore %s matches for %s...\n',
+            sport_label.lower(),
+            date_str,
+        )
 
         if is_hockey:
             from .hockey_scraper import scrape_hockey
@@ -148,7 +152,12 @@ async def main() -> None:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(project_root, 'output')
         os.makedirs(output_dir, exist_ok=True)
-        file_prefix = 'hockey_matches' if is_hockey else 'football_matches' if is_football else 'matches'
+        if is_hockey:
+            file_prefix = 'hockey_matches'
+        elif is_football:
+            file_prefix = 'football_matches'
+        else:
+            file_prefix = 'matches'
         output_file = os.path.join(
             output_dir, f'{file_prefix}_{target_date.strftime("%Y-%m-%d")}.json'
         )
@@ -172,7 +181,9 @@ async def main() -> None:
             logger.info('Loaded %d matches from %s', len(match_data), json_file)
 
         if not match_data:
-            logger.info('No match data to inject. Run with scrape first or provide --json=file.json')
+            logger.info(
+                'No match data to inject. Run with scrape first or provide --json=file.json'
+            )
             return
 
         if not config.google.spreadsheet_id:

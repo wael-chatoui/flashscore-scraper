@@ -22,14 +22,14 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_DELAY_S = 2
-PER_MATCH_TIMEOUT_S = 90       # seconds per match H2H scraping
-GLOBAL_TIMEOUT_S = 2 * 3600    # 2 hours total for match processing loop
-PARTIAL_SAVE_INTERVAL = 25     # save partial results every N matches
-MAX_SHOW_MORE_CLICKS = 30      # cap show-more button clicks to prevent infinite loops
-BATCH_SIZE = 30                # pause after every N matches
-BATCH_COOLDOWN_S = 90          # seconds to pause between batches
-CONSECUTIVE_EMPTY_LIMIT = 3    # trigger cooldown after N consecutive empty results
-RATE_LIMIT_COOLDOWN_S = 180    # seconds to wait when rate-limited
+PER_MATCH_TIMEOUT_S = 90  # seconds per match H2H scraping
+GLOBAL_TIMEOUT_S = 2 * 3600  # 2 hours total for match processing loop
+PARTIAL_SAVE_INTERVAL = 25  # save partial results every N matches
+MAX_SHOW_MORE_CLICKS = 30  # cap show-more button clicks to prevent infinite loops
+BATCH_SIZE = 30  # pause after every N matches
+BATCH_COOLDOWN_S = 90  # seconds to pause between batches
+CONSECUTIVE_EMPTY_LIMIT = 3  # trigger cooldown after N consecutive empty results
+RATE_LIMIT_COOLDOWN_S = 180  # seconds to wait when rate-limited
 
 BASE_URL = 'https://www.flashscore.fr'
 
@@ -73,10 +73,7 @@ _SHARED_SELECTORS: dict[str, dict[str, str]] = {
     },
     'h2h': {
         'section': '.h2h__section',
-        'section_title': (
-            '.h2h__title, .section__title,'
-            ' [data-testid="wcl-scores-overline-02"]'
-        ),
+        'section_title': ('.h2h__title, .section__title, [data-testid="wcl-scores-overline-02"]'),
         'row': '.h2h__row',
         'result': '.h2h__result',
         'show_more_btn': 'button.wclButtonLink--h2h',
@@ -545,7 +542,11 @@ async def run_scraper(
             await validate_page_selectors(page, sport_url, validation_checks)
 
             # Step 1: Get matches for target date
-            logger.info('Fetching %s matches for %s...', sport_name, target_date.strftime('%d/%m/%Y'))
+            logger.info(
+                'Fetching %s matches for %s...',
+                sport_name,
+                target_date.strftime('%d/%m/%Y'),
+            )
             matches = await extract_matches_for_date(page, sport_url, selectors, days_offset)
             logger.info('Found %d %s matches', len(matches), sport_name)
 
@@ -587,7 +588,10 @@ async def run_scraper(
                     logger.warning(
                         'Global timeout reached (%.0fs / %ds) after %d/%d matches '
                         '— returning partial results',
-                        elapsed, GLOBAL_TIMEOUT_S, i, len(matches_to_process),
+                        elapsed,
+                        GLOBAL_TIMEOUT_S,
+                        i,
+                        len(matches_to_process),
                     )
                     break
 
@@ -607,7 +611,10 @@ async def run_scraper(
                     except asyncio.TimeoutError:
                         logger.warning(
                             'Timeout (%ds) scraping match %s: %s vs %s (%s) — using default stats',
-                            PER_MATCH_TIMEOUT_S, n, match['teamA'], match['teamB'],
+                            PER_MATCH_TIMEOUT_S,
+                            n,
+                            match['teamA'],
+                            match['teamB'],
                             match['matchUrl'],
                         )
                         stats = default_stats
@@ -615,7 +622,10 @@ async def run_scraper(
                     if _stats_are_empty(stats):
                         logger.warning(
                             'Empty stats for match %s: %s vs %s (%s)',
-                            n, match['teamA'], match['teamB'], match['matchUrl'],
+                            n,
+                            match['teamA'],
+                            match['teamB'],
+                            match['matchUrl'],
                         )
                         consecutive_empty += 1
                         failed_indices.append(len(results))
@@ -623,7 +633,8 @@ async def run_scraper(
                             logger.warning(
                                 'Rate-limit detected: %d consecutive empty results '
                                 '— cooling down %ds',
-                                consecutive_empty, RATE_LIMIT_COOLDOWN_S,
+                                consecutive_empty,
+                                RATE_LIMIT_COOLDOWN_S,
                             )
                             await page.wait_for_timeout(RATE_LIMIT_COOLDOWN_S * 1000)
                             consecutive_empty = 0
@@ -633,7 +644,9 @@ async def run_scraper(
                 else:
                     logger.warning(
                         'No matchUrl for match %s: %s vs %s — using default stats',
-                        n, match['teamA'], match['teamB'],
+                        n,
+                        match['teamA'],
+                        match['teamB'],
                     )
                     results.append({**match_data, **default_stats})
 
@@ -647,7 +660,8 @@ async def run_scraper(
                 if (i + 1) % BATCH_SIZE == 0 and i + 1 < len(matches_to_process):
                     logger.info(
                         'Batch cooldown: pausing %ds after %d matches...',
-                        BATCH_COOLDOWN_S, i + 1,
+                        BATCH_COOLDOWN_S,
+                        i + 1,
                     )
                     await page.wait_for_timeout(BATCH_COOLDOWN_S * 1000)
 
@@ -658,7 +672,8 @@ async def run_scraper(
                 if remaining_s > 300:  # only retry if >5 min left
                     logger.info(
                         'Retry pass: %d matches with empty stats, cooling down %ds first...',
-                        len(failed_indices), RATE_LIMIT_COOLDOWN_S,
+                        len(failed_indices),
+                        RATE_LIMIT_COOLDOWN_S,
                     )
                     await page.wait_for_timeout(RATE_LIMIT_COOLDOWN_S * 1000)
 
@@ -679,13 +694,18 @@ async def run_scraper(
                         n = f'{retried}/{len(failed_indices)}'
                         logger.info(
                             'Retrying match %s: %s vs %s',
-                            n, r.get('teamA', ''), r.get('teamB', ''),
+                            n,
+                            r.get('teamA', ''),
+                            r.get('teamB', ''),
                         )
 
                         try:
                             stats = await asyncio.wait_for(
                                 scrape_match_stats(
-                                    page, url, r.get('teamA', ''), r.get('teamB', ''),
+                                    page,
+                                    url,
+                                    r.get('teamA', ''),
+                                    r.get('teamB', ''),
                                 ),
                                 timeout=PER_MATCH_TIMEOUT_S,
                             )
@@ -707,7 +727,8 @@ async def run_scraper(
 
                     logger.info(
                         'Retry pass complete: fixed %d/%d matches',
-                        fixed, retried,
+                        fixed,
+                        retried,
                     )
                 else:
                     logger.warning(

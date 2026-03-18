@@ -144,7 +144,9 @@ async def scrape_football_h2h_stats(
         if not sections:
             logger.warning(
                 'H2H page has 0 sections for %s vs %s — retrying in 15s (%s)',
-                team_a, team_b, h2h_url,
+                team_a,
+                team_b,
+                h2h_url,
             )
             await page.wait_for_timeout(15000)
             await page.reload(wait_until='domcontentloaded')
@@ -155,7 +157,8 @@ async def scrape_football_h2h_stats(
             if not sections:
                 logger.warning(
                     'H2H page still has 0 sections after retry for %s vs %s',
-                    team_a, team_b,
+                    team_a,
+                    team_b,
                 )
                 return {'teamAScores': default_scores, 'teamBScores': default_scores}
 
@@ -224,8 +227,12 @@ async def scrape_football_h2h_stats(
             logger.warning(
                 'Incomplete H2H matching for %s vs %s: matched_a=%s, matched_b=%s '
                 '(sections=%d, titles=%s)',
-                team_a, team_b, matched_a, matched_b,
-                len(sections), section_titles,
+                team_a,
+                team_b,
+                matched_a,
+                matched_b,
+                len(sections),
+                section_titles,
             )
 
         return {'teamAScores': team_a_scores, 'teamBScores': team_b_scores}

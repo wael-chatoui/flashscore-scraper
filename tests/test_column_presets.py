@@ -10,11 +10,16 @@ def test_presets_have_required_keys():
 
 
 def test_stats_keys():
-    """Each stats group must define set3, set4, set5 (unless h2h is None).
+    """Each stats group must define set3, set4, set5 (unless teamA/teamB is None).
 
+    Raw-scores presets (HOCKEY RAW, FOOTBALL, etc.) use teamAScores/teamBScores dicts
+    instead of set3/set4/set5 — skip those.
     Hockey presets may additionally define set2 (<=4 goals).
     """
     for name, preset in COLUMN_PRESETS.items():
+        # Skip raw-scores presets where teamA/teamB are None
+        if preset.get('teamA') is None or preset.get('teamB') is None:
+            continue
         for group in ('teamA', 'teamB'):
             for key in ('set3', 'set4', 'set5'):
                 assert key in preset[group], f'{name}.{group} missing {key}'

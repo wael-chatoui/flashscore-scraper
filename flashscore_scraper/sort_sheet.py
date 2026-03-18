@@ -81,7 +81,7 @@ def normalize_dates(sheets, spreadsheet_id: str, sheet_id: int, date_col: str) -
 
     col_values = values[0]
     cleaned = [_clean_date(v) for v in col_values]
-    fixed = sum(1 for old, new in zip(col_values, cleaned) if old != new)
+    fixed = sum(1 for old, new in zip(col_values, cleaned, strict=False) if old != new)
     if fixed:
         logger.info('  Fixed %d malformed dates (trailing quotes / 2-digit years)', fixed)
     # Write back only the date column with USER_ENTERED to convert text→date
@@ -102,7 +102,11 @@ def normalize_dates(sheets, spreadsheet_id: str, sheet_id: int, date_col: str) -
 
 
 def delete_blank_rows(
-    sheets, spreadsheet_id: str, sheet_id: int, date_col: str, preset_name: str = 'ORIGINAL',
+    sheets,
+    spreadsheet_id: str,
+    sheet_id: int,
+    date_col: str,
+    preset_name: str = 'ORIGINAL',
 ) -> None:
     """Delete rows that are blank or incomplete (date only, no team names).
 
@@ -144,7 +148,9 @@ def delete_blank_rows(
         if not any(cell.strip() for cell in row):
             return True
         # Incomplete: date present but both team columns empty
-        return bool(_cell(row, date_idx)) and not _cell(row, team_a_idx) and not _cell(row, team_b_idx)
+        return (
+            bool(_cell(row, date_idx)) and not _cell(row, team_a_idx) and not _cell(row, team_b_idx)
+        )
 
     # Find deletable row ranges, work bottom-up
     blank_ranges = []
@@ -165,7 +171,9 @@ def delete_blank_rows(
         return
 
     total_deleted = sum(end - start + 1 for start, end in blank_ranges)
-    logger.info('  Deleting %d blank/incomplete rows in %d range(s)', total_deleted, len(blank_ranges))
+    logger.info(
+        '  Deleting %d blank/incomplete rows in %d range(s)', total_deleted, len(blank_ranges)
+    )
 
     # Build delete requests (already bottom-up so indices stay valid)
     requests = []

@@ -148,7 +148,9 @@ async def scrape_h2h_stats(
         if not sections:
             logger.warning(
                 'H2H page has 0 sections for %s vs %s (%s)',
-                team_a, team_b, h2h_url,
+                team_a,
+                team_b,
+                h2h_url,
             )
             return {
                 'teamAStats': default_stats,
@@ -221,7 +223,12 @@ async def scrape_h2h_stats(
             logger.warning(
                 'Incomplete H2H matching for %s vs %s: matched_a=%s, matched_b=%s, '
                 'matched_h2h=%s (sections=%d)',
-                team_a, team_b, matched_a, matched_b, matched_h2h, len(sections),
+                team_a,
+                team_b,
+                matched_a,
+                matched_b,
+                matched_h2h,
+                len(sections),
             )
 
         return {'teamAStats': team_a_stats, 'teamBStats': team_b_stats, 'h2hStats': h2h_stats}

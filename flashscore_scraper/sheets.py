@@ -528,7 +528,9 @@ def inject_to_google_sheets(
 
     # Filter out matches with empty team names (defensive guard)
     original_count = len(match_data)
-    match_data = [m for m in match_data if m.get('teamA', '').strip() and m.get('teamB', '').strip()]
+    match_data = [
+        m for m in match_data if m.get('teamA', '').strip() and m.get('teamB', '').strip()
+    ]
     filtered = original_count - len(match_data)
     if filtered:
         logger.warning('Filtered out %d matches with empty team names', filtered)
@@ -600,14 +602,16 @@ def inject_to_google_sheets(
                 ]
                 if has_sexe:
                     row.append(m.get('sexe', ''))
-                row.extend([
-                    m.get('country', ''),
-                    m.get('league', ''),
-                    m.get('teamA', ''),
-                    m.get('rankA', ''),
-                    m.get('teamB', ''),
-                    m.get('rankB', ''),
-                ])
+                row.extend(
+                    [
+                        m.get('country', ''),
+                        m.get('league', ''),
+                        m.get('teamA', ''),
+                        m.get('rankA', ''),
+                        m.get('teamB', ''),
+                        m.get('rankB', ''),
+                    ]
+                )
                 # Append ecart (rank difference) if the preset has an ecart column
                 if 'ecart' in match_info:
                     rank_a = m.get('rankA', '')
@@ -670,8 +674,7 @@ def inject_to_google_sheets(
     if preset.get('teamAScores'):
         score_count = preset['teamAScores']['count']
         team_a_score_values = [
-            (m.get('teamAScores', []) + [''] * score_count)[:score_count]
-            for m in match_data
+            (m.get('teamAScores', []) + [''] * score_count)[:score_count] for m in match_data
         ]
         write_data.append(
             {
@@ -685,8 +688,7 @@ def inject_to_google_sheets(
     if preset.get('teamBScores'):
         score_count = preset['teamBScores']['count']
         team_b_score_values = [
-            (m.get('teamBScores', []) + [''] * score_count)[:score_count]
-            for m in match_data
+            (m.get('teamBScores', []) + [''] * score_count)[:score_count] for m in match_data
         ]
         write_data.append(
             {
@@ -708,10 +710,7 @@ def inject_to_google_sheets(
     if preset.get('teamA'):
         has_set2_a = 'set2' in preset['teamA']
         keys_a = (['count2'] if has_set2_a else []) + ['count3', 'count4', 'count5']
-        team_a_values = [
-            _stat_values(m.get('teamAStats', {}), keys_a)
-            for m in match_data
-        ]
+        team_a_values = [_stat_values(m.get('teamAStats', {}), keys_a) for m in match_data]
         write_data.append(
             {
                 'start_col': preset['teamA'].get('set2', preset['teamA']['set3']),
@@ -725,10 +724,7 @@ def inject_to_google_sheets(
     if preset.get('teamB'):
         has_set2_b = 'set2' in preset['teamB']
         keys_b = (['count2'] if has_set2_b else []) + ['count3', 'count4', 'count5']
-        team_b_values = [
-            _stat_values(m.get('teamBStats', {}), keys_b)
-            for m in match_data
-        ]
+        team_b_values = [_stat_values(m.get('teamBStats', {}), keys_b) for m in match_data]
         write_data.append(
             {
                 'start_col': preset['teamB'].get('set2', preset['teamB']['set3']),
@@ -741,8 +737,7 @@ def inject_to_google_sheets(
     # H2H stats (skip when preset has no h2h, e.g. hockey)
     if preset.get('h2h'):
         h2h_values = [
-            _stat_values(m.get('h2hStats', {}), ['count3', 'count4', 'count5'])
-            for m in match_data
+            _stat_values(m.get('h2hStats', {}), ['count3', 'count4', 'count5']) for m in match_data
         ]
         write_data.append(
             {
