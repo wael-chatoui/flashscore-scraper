@@ -72,6 +72,39 @@ services:
         reservations:
           memory: 512M
 
+  football-scraper:
+    build: .
+    container_name: flashscore-football-scraper
+    command: ["sh", "-c", "python -m flashscore_scraper --sport=football --days=0; python -m flashscore_scraper --sport=football --days=1"]
+    environment:
+      # Google Sheets configuration
+      - SPREADSHEET_ID=${FOOTBALL_SPREADSHEET_ID:-1mgk8PG9P5H8rF7AiKDcWfrqd3hIjkZmy7OC-PVvbh80}
+      - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON}
+      - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
+
+      # Scraper settings
+      - SPORT=football
+      - HEADLESS=true
+      - REQUEST_DELAY=2000
+      - MAX_MATCHES=0
+
+      # Sheet configuration
+      - SHEET_PRESET=FOOTBALL
+      - START_ROW=2
+
+    volumes:
+      - ./credentials.json:/app/credentials.json:ro
+      - ./output:/app/output
+
+    restart: "no"
+
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
   # Optional: Scheduled runner using ofelia (cron for Docker)
   scheduler:
     image: mcuadros/ofelia:latest
@@ -79,13 +112,16 @@ services:
     depends_on:
       - scraper
       - hockey-scraper
+      - football-scraper
     command: daemon --docker
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     labels:
-      ofelia.job-run.volleyball.schedule: "0 0 1 * * *"  # Run at 1:00 AM UTC daily
-      ofelia.job-run.volleyball.container: "flashscore-volleyball-scraper"
-      ofelia.job-run.hockey.schedule: "0 0 2 * * *"  # Run at 2:00 AM UTC daily
-      ofelia.job-run.hockey.container: "flashscore-hockey-scraper"
+      ofelia.job-local.volleyball.schedule: "0 0 1 * * *"
+      ofelia.job-local.volleyball.command: "/root/flashscore-scraper/run_volleyball.sh"
+      ofelia.job-local.hockey.schedule: "0 0 2 * * *"
+      ofelia.job-local.hockey.command: "/root/flashscore-scraper/run_hockey.sh"
+      ofelia.job-local.football.schedule: "0 0 3 * * *"
+      ofelia.job-local.football.command: "/root/flashscore-scraper/run_football.sh"
     profiles:
       - scheduled  # Only start with: docker compose --profile scheduled up
