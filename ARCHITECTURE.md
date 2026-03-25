@@ -129,7 +129,7 @@ All FlashScore selectors live in the `SELECTORS` dict at the top of `scraper.py`
 - **Local**: `pip install -e . && playwright install chromium`
 - **Systemd timer**: `./scripts/install_cron.sh systemd` (daily at 1:00 AM UTC)
 - **Cron**: `./scripts/install_cron.sh cron`
-- **Docker**: `docker compose up --build` (with optional ofelia scheduler)
+- **Docker**: `docker compose up --build` (with optional ofelia scheduler + mounted runner scripts)
 
 ### Production VPS
 
@@ -146,7 +146,7 @@ All FlashScore selectors live in the `SELECTORS` dict at the top of `scraper.py`
 
 **Containers:**
 - `flashscore-volleyball-scraper` — runs the scraper, exits after completion
-- `flashscore-scheduler` — ofelia daemon, triggers scraper container daily
+- `flashscore-scheduler` — ofelia daemon, triggers the Docker runner scripts daily
 
 **Config files (on VPS only, not in git):**
 - `.env` — SPREADSHEET_ID, SHEET_PRESET, etc.
