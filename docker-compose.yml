@@ -58,12 +58,13 @@ services:
     command: daemon --docker
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - .:/root/flashscore-scraper
     labels:
-      ofelia.job-run.volleyball.schedule: "0 0 1 * * *"
-      ofelia.job-run.volleyball.container: "flashscore-volleyball-scraper"
-      ofelia.job-run.hockey.schedule: "0 0 2 * * *"
-      ofelia.job-run.hockey.container: "flashscore-hockey-scraper"
-      ofelia.job-run.football.schedule: "0 0 3 * * *"
-      ofelia.job-run.football.container: "flashscore-football-scraper"
+      ofelia.job-local.volleyball.schedule: "0 0 1 * * *"
+      ofelia.job-local.volleyball.command: "/root/flashscore-scraper/scripts/run_volleyball_docker.sh"
+      ofelia.job-local.hockey.schedule: "0 0 2 * * *"
+      ofelia.job-local.hockey.command: "/root/flashscore-scraper/scripts/run_hockey_docker.sh"
+      ofelia.job-local.football.schedule: "0 0 3 * * *"
+      ofelia.job-local.football.command: "/root/flashscore-scraper/scripts/run_football_docker.sh"
     profiles:
       - scheduled  # Only start with: docker compose --profile scheduled up

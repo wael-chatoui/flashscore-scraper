@@ -54,7 +54,13 @@ async def scrape_day(days_offset: int, sport: str = 'volleyball') -> list[dict]:
     target_date = datetime.now() + timedelta(days=days_offset)
     date_str = target_date.strftime('%Y-%m-%d')
     display_date = target_date.strftime('%d/%m/%Y')
-    file_prefix = 'football_matches' if sport == 'football' else 'hockey_matches' if sport == 'hockey' else 'matches'
+    if sport == 'football':
+        file_prefix = 'football_matches'
+    elif sport == 'hockey':
+        file_prefix = 'hockey_matches'
+    else:
+        file_prefix = 'matches'
+        
     json_path = os.path.join(OUTPUT_DIR, f'{file_prefix}_{date_str}.json')
 
     logger.info('\n%s', '=' * 50)
@@ -95,6 +101,7 @@ def load_all_jsons(sport: str = 'volleyball') -> list[dict]:
         pattern = 'hockey_matches_*.json'
     else:
         pattern = 'matches_*.json'
+        
     json_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, pattern)))
 
     logger.info('Loading %d JSON files...', len(json_files))
@@ -155,7 +162,7 @@ async def main():
 
     if is_hockey and config.sheets.preset not in ('HOCKEY RAW',):
         config.sheets.preset = 'HOCKEY RAW'
-    if is_football and config.sheets.preset not in ('FOOTBALL',):
+    elif is_football and config.sheets.preset not in ('FOOTBALL',):
         config.sheets.preset = 'FOOTBALL'
 
     override_sheet_id = None

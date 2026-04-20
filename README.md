@@ -33,6 +33,6 @@ flashscore-scraper --days=-2          # date spécifique (offset en jours)
 Un push sur `main` déclenche le pipeline GitHub Actions (lint, tests, déploiement SSH sur le VPS).
 
 ```bash
-# Docker avec scheduler (1h00 UTC chaque jour)
+# Docker avec scheduler (scripts Docker montés, 1h00 UTC chaque jour)
 docker compose --profile scheduled up -d
 ```

@@ -95,7 +95,7 @@ COLUMN_PRESETS = {
             'ecart': 'J',
         },
         'teamA': {'set2': 'O', 'set3': 'P', 'set4': 'Q', 'set5': 'R'},
-        'teamB': {'set3': 'W', 'set4': 'X', 'set5': 'Y'},
+        'teamB': {'set2': 'V', 'set3': 'W', 'set4': 'X', 'set5': 'Y'},
         'h2h': None,
     },
     # Hockey RAW preset — writes raw total-goal values (15 per team)

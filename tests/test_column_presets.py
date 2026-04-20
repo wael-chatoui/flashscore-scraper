@@ -59,6 +59,4 @@ def test_hockey_preset():
     assert mi['rankB'] == 'I'
     assert mi['ecart'] == 'J'
     assert preset['teamA'] == {'set2': 'O', 'set3': 'P', 'set4': 'Q', 'set5': 'R'}
-    # Team B has no set2 (<=4 goals column missing from sheet)
-    assert preset['teamB'] == {'set3': 'W', 'set4': 'X', 'set5': 'Y'}
-    assert 'set2' not in preset['teamB']
+    assert preset['teamB'] == {'set2': 'V', 'set3': 'W', 'set4': 'X', 'set5': 'Y'}
