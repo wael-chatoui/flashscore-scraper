@@ -42,7 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         '--sport',
-        choices=['volleyball', 'hockey'],
+        choices=['volleyball', 'hockey', 'football'],
         default=config.scraper.sport,
         help='Sport to scrape (default: from SPORT env var)',
     )
@@ -54,7 +54,7 @@ async def scrape_day(days_offset: int, sport: str = 'volleyball') -> list[dict]:
     target_date = datetime.now() + timedelta(days=days_offset)
     date_str = target_date.strftime('%Y-%m-%d')
     display_date = target_date.strftime('%d/%m/%Y')
-    file_prefix = 'hockey_matches' if sport == 'hockey' else 'matches'
+    file_prefix = 'football_matches' if sport == 'football' else 'hockey_matches' if sport == 'hockey' else 'matches'
     json_path = os.path.join(OUTPUT_DIR, f'{file_prefix}_{date_str}.json')
 
     logger.info('\n%s', '=' * 50)
@@ -66,6 +66,10 @@ async def scrape_day(days_offset: int, sport: str = 'volleyball') -> list[dict]:
             from .hockey_scraper import scrape_hockey
 
             match_data = await scrape_hockey(days_offset=days_offset)
+        elif sport == 'football':
+            from .football_scraper import scrape_football
+
+            match_data = await scrape_football(days_offset=days_offset)
         else:
             from .scraper import scrape_flashscore
 
@@ -85,7 +89,12 @@ async def scrape_day(days_offset: int, sport: str = 'volleyball') -> list[dict]:
 def load_all_jsons(sport: str = 'volleyball') -> list[dict]:
     """Load all JSON files from output directory."""
     all_data = []
-    pattern = 'hockey_matches_*.json' if sport == 'hockey' else 'matches_*.json'
+    if sport == 'football':
+        pattern = 'football_matches_*.json'
+    elif sport == 'hockey':
+        pattern = 'hockey_matches_*.json'
+    else:
+        pattern = 'matches_*.json'
     json_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, pattern)))
 
     logger.info('Loading %d JSON files...', len(json_files))
@@ -107,6 +116,7 @@ async def main():
     inject_only = args.inject_only
     sport = args.sport
     is_hockey = sport == 'hockey'
+    is_football = sport == 'football'
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -143,17 +153,25 @@ async def main():
         logger.error('SPREADSHEET_ID not configured!')
         sys.exit(1)
 
-    if is_hockey and config.sheets.preset not in ('HOCKEY UND',):
-        config.sheets.preset = 'HOCKEY UND'
+    if is_hockey and config.sheets.preset not in ('HOCKEY RAW',):
+        config.sheets.preset = 'HOCKEY RAW'
+    if is_football and config.sheets.preset not in ('FOOTBALL',):
+        config.sheets.preset = 'FOOTBALL'
+
+    override_sheet_id = None
+    if is_hockey:
+        override_sheet_id = config.google.hockey_spreadsheet_id
+    elif is_football:
+        override_sheet_id = config.google.football_spreadsheet_id
 
     logger.info('Injecting all data into Google Sheets (single batch)...')
-    inject_to_google_sheets(all_data, config.sheets.start_row)
+    inject_to_google_sheets(all_data, config.sheets.start_row, spreadsheet_id=override_sheet_id)
 
     preset_name = config.sheets.preset or 'ORIGINAL'
     logger.info('Sorting sheet by date (once)...')
-    sort_sheet_by_date(preset_name=preset_name)
+    sort_sheet_by_date(descending=True, preset_name=preset_name, spreadsheet_id=override_sheet_id)
 
-    if not is_hockey:
+    if not is_hockey and not is_football:
         logger.info('Injecting formulas (after sort)...')
         inject_original_formulas()
 

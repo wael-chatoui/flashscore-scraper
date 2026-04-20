@@ -2,34 +2,12 @@ services:
   scraper:
     build: .
     container_name: flashscore-volleyball-scraper
+    env_file: .env
     command: ["sh", "-c", "python -m flashscore_scraper --days=0; python -m flashscore_scraper --days=1"]
-    environment:
-      # Google Sheets configuration
-      - SPREADSHEET_ID=${SPREADSHEET_ID}
-      - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON}
-      - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
-
-      # Scraper settings
-      - SPORT=volleyball
-      - HEADLESS=true
-      - REQUEST_DELAY=1000
-      - MAX_MATCHES=0
-
-      # Sheet configuration
-      # Use 'ORIGINAL' for client's original spreadsheet, 'SCRAPING OU4' for test version
-      - SHEET_PRESET=${SHEET_PRESET:-ORIGINAL}
-      - SHEET_TAB_NAME=${SHEET_TAB_NAME:-}
-      - START_ROW=${START_ROW:-2}
-
-    # Mount credentials file if using file-based auth
     volumes:
       - ./credentials.json:/app/credentials.json:ro
       - ./output:/app/output
-
-    # For cron scheduling, use restart policy
     restart: "no"
-
-    # Resource limits
     deploy:
       resources:
         limits:
@@ -40,31 +18,28 @@ services:
   hockey-scraper:
     build: .
     container_name: flashscore-hockey-scraper
+    env_file: .env
     command: ["sh", "-c", "python -m flashscore_scraper --sport=hockey --days=0; python -m flashscore_scraper --sport=hockey --days=1"]
-    environment:
-      # Google Sheets configuration
-      - SPREADSHEET_ID=${SPREADSHEET_ID}
-      - HOCKEY_SPREADSHEET_ID=${HOCKEY_SPREADSHEET_ID:-}
-      - GOOGLE_CREDENTIALS_JSON=${GOOGLE_CREDENTIALS_JSON}
-      - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
-
-      # Scraper settings
-      - SPORT=hockey
-      - HEADLESS=true
-      - REQUEST_DELAY=2000
-      - MAX_MATCHES=0
-
-      # Sheet configuration
-      - SHEET_PRESET=HOCKEY RAW
-      - SHEET_TAB_NAME=${HOCKEY_SHEET_TAB_NAME:-}
-      - START_ROW=${START_ROW:-2}
-
     volumes:
       - ./credentials.json:/app/credentials.json:ro
       - ./output:/app/output
-
     restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
 
+  football-scraper:
+    build: .
+    container_name: flashscore-football-scraper
+    env_file: .env
+    command: ["sh", "-c", "python -m flashscore_scraper --sport=football --days=0; python -m flashscore_scraper --sport=football --days=1"]
+    volumes:
+      - ./credentials.json:/app/credentials.json:ro
+      - ./output:/app/output
+    restart: "no"
     deploy:
       resources:
         limits:
@@ -79,13 +54,16 @@ services:
     depends_on:
       - scraper
       - hockey-scraper
+      - football-scraper
     command: daemon --docker
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     labels:
-      ofelia.job-run.volleyball.schedule: "0 0 1 * * *"  # Run at 1:00 AM UTC daily
+      ofelia.job-run.volleyball.schedule: "0 0 1 * * *"
       ofelia.job-run.volleyball.container: "flashscore-volleyball-scraper"
-      ofelia.job-run.hockey.schedule: "0 0 2 * * *"  # Run at 2:00 AM UTC daily
+      ofelia.job-run.hockey.schedule: "0 0 2 * * *"
       ofelia.job-run.hockey.container: "flashscore-hockey-scraper"
+      ofelia.job-run.football.schedule: "0 0 3 * * *"
+      ofelia.job-run.football.container: "flashscore-football-scraper"
     profiles:
       - scheduled  # Only start with: docker compose --profile scheduled up

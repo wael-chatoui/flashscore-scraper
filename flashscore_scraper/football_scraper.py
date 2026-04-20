@@ -66,13 +66,19 @@ class FootballMatchWithStats(FootballMatch, FootballMatchStats):
 def parse_football_score(text: str) -> tuple[int | None, int | None]:
     """Parse a football score string into (goals_a, goals_b).
 
-    Handles formats: "2:1", "2-1", "2 - 1", "2 : 1".
+    Handles formats: "2:1", "2-1", "2 - 1", "2 : 1", "21" (concatenated).
+    Strips OT/AP/TB suffixes (e.g. "2:1 AP").
     Returns (None, None) if parsing fails.
     """
     if not text:
         return None, None
 
     text = text.strip()
+
+    # Strip common suffixes (AP, TB, OT, etc.)
+    for suffix in ('AP', 'TB', 'SO', 'OT', 'P', 'ap', 'tb', 'so', 'ot', 'p'):
+        if text.endswith(suffix):
+            text = text[: -len(suffix)].strip()
 
     for sep in (':', '-'):
         if sep in text:
@@ -82,6 +88,10 @@ def parse_football_score(text: str) -> tuple[int | None, int | None]:
                     return int(parts[0].strip()), int(parts[1].strip())
                 except ValueError:
                     continue
+
+    # Fallback: handle concatenated single-digit scores (FlashScore sometimes renders as <span>2</span><span>1</span>)
+    if len(text) == 2 and text.isdigit():
+        return int(text[0]), int(text[1])
 
     return None, None
 
