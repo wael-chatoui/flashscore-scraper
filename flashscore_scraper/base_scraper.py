@@ -360,6 +360,12 @@ async def extract_matches_for_date(
                 const timeEl = el.querySelector(sel.match_time);
                 const linkEl = el.querySelector(sel.match_link);
 
+                // Extract current score if available (finished or live matches)
+                const scoreHomeEl = el.querySelector('.event__score--home');
+                const scoreAwayEl = el.querySelector('.event__score--away');
+                const scoreHome = scoreHomeEl?.textContent?.trim() || '';
+                const scoreAway = scoreAwayEl?.textContent?.trim() || '';
+
                 const teamA = homeEl?.textContent?.trim() || '';
                 const teamB = awayEl?.textContent?.trim() || '';
                 const time = timeEl?.textContent?.trim() || '';
@@ -372,6 +378,8 @@ async def extract_matches_for_date(
                         leagueUrl: currentLeagueUrl,
                         teamA,
                         teamB,
+                        scoreHome,
+                        scoreAway,
                         time,
                         href
                     });
@@ -408,6 +416,8 @@ async def extract_matches_for_date(
                 'rankA': '',
                 'teamB': data['teamB'],
                 'rankB': '',
+                'scoreHome': data.get('scoreHome', ''),
+                'scoreAway': data.get('scoreAway', ''),
                 'matchUrl': match_url,
             }
         )

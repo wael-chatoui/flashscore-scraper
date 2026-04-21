@@ -136,10 +136,12 @@ COLUMN_PRESETS = {
             'rankA': 'F',
             'teamB': 'G',
             'rankB': 'H',
-            # I = ECART (formule), J-M = cotes (saisie manuelle) → NE PAS TOUCHER
+            'scoreHome': 'I',
+            'scoreAway': 'J',
+            # K = ECART (formule)
         },
-        'teamAScores': {'start': 'N', 'end': 'AG', 'count': 20},
-        'teamBScores': {'start': 'AH', 'end': 'BA', 'count': 20},
+        'teamAScores': {'start': 'L', 'end': 'AE', 'count': 20},
+        'teamBScores': {'start': 'AF', 'end': 'AY', 'count': 20},
         'teamA': None,
         'teamB': None,
         'h2h': None,
@@ -612,6 +614,12 @@ def inject_to_google_sheets(
                         m.get('rankB', ''),
                     ]
                 )
+                # Append scoreHome and scoreAway if present
+                if 'scoreHome' in match_info:
+                    row.append(m.get('scoreHome', ''))
+                if 'scoreAway' in match_info:
+                    row.append(m.get('scoreAway', ''))
+
                 # Append ecart (rank difference) if the preset has an ecart column
                 if 'ecart' in match_info:
                     rank_a = m.get('rankA', '')
@@ -624,7 +632,7 @@ def inject_to_google_sheets(
                 row_values.append(row)
 
             col_from = match_info['date']
-            col_to = match_info.get('ecart', match_info['rankB'])
+            col_to = match_info.get('ecart', match_info.get('scoreAway', match_info['rankB']))
             write_data.append(
                 {
                     'start_col': col_from,
