@@ -56,6 +56,28 @@ def main() -> None:
     sheet_props = _get_sheet_props(sheets, SPREADSHEET_ID, TAB_NAME)
     sheet_id = sheet_props['sheetId']
 
+    # Expand columns if the sheet has fewer than 60
+    needed_cols = len(ALL_SPORTS_LOG_HEADER)
+    current_cols = sheet_props['gridProperties']['columnCount']
+    if current_cols < needed_cols:
+        print(f'Expanding sheet from {current_cols} to {needed_cols} columns...')
+        sheets.spreadsheets().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body={
+                'requests': [
+                    {
+                        'updateSheetProperties': {
+                            'properties': {
+                                'sheetId': sheet_id,
+                                'gridProperties': {'columnCount': needed_cols},
+                            },
+                            'fields': 'gridProperties.columnCount',
+                        }
+                    }
+                ]
+            },
+        ).execute()
+
     print(f'Writing {len(ALL_SPORTS_LOG_HEADER)} column headers (A–{_LOG_LAST_COL})...')
     _write_values(
         sheets,
