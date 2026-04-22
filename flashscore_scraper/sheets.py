@@ -858,11 +858,11 @@ def inject_original_formulas() -> None:
 ALL_SPORTS_LOG_HEADER = [
     'Sport', 'Date', 'Heure', 'Pays', 'Ligue', 'Equipe A', 'Rang A', 'Equipe B', 'Rang B',
     'Score Dom.', 'Score Ext.',
-    'VB Set3 A', 'VB Set4 A', 'VB Set5 A',
-    'VB Set3 B', 'VB Set4 B', 'VB Set5 B',
-    'VB H2H Set3', 'VB H2H Set4', 'VB H2H Set5',
-    *[f'Score A{i}' for i in range(1, 21)],
-    *[f'Score B{i}' for i in range(1, 21)],
+    'Set3 A', 'Set4 A', 'Set5 A',
+    'Set3 B', 'Set4 B', 'Set5 B',
+    'H2H Set3', 'H2H Set4', 'H2H Set5',
+    *[f'Buts A{i}' for i in range(1, 21)],
+    *[f'Buts B{i}' for i in range(1, 21)],
 ]
 
 _LOG_LAST_COL = 'BH'  # 60th column
