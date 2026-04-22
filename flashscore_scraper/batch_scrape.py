@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta
 
 from .config import config, setup_logging
-from .sheets import inject_original_formulas, inject_to_google_sheets
+from .sheets import inject_original_formulas, inject_to_all_sports_log, inject_to_google_sheets
 from .sort_sheet import sort_sheet_by_date
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ async def scrape_day(days_offset: int, sport: str = 'volleyball') -> list[dict]:
         file_prefix = 'hockey_matches'
     else:
         file_prefix = 'matches'
-        
+
     json_path = os.path.join(OUTPUT_DIR, f'{file_prefix}_{date_str}.json')
 
     logger.info('\n%s', '=' * 50)
@@ -101,7 +101,7 @@ def load_all_jsons(sport: str = 'volleyball') -> list[dict]:
         pattern = 'hockey_matches_*.json'
     else:
         pattern = 'matches_*.json'
-        
+
     json_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, pattern)))
 
     logger.info('Loading %d JSON files...', len(json_files))
@@ -181,6 +181,17 @@ async def main():
     if not is_hockey and not is_football:
         logger.info('Injecting formulas (after sort)...')
         inject_original_formulas()
+
+    # Inject to unified all-sports log (if configured)
+    log_sheet_id = config.google.all_sports_log_spreadsheet_id
+    if log_sheet_id:
+        logger.info('Injecting to all-sports log...')
+        inject_to_all_sports_log(
+            all_data,
+            sport=sport,
+            spreadsheet_id=log_sheet_id,
+            tab_name=config.google.all_sports_log_tab_name,
+        )
 
     logger.info('Done! Injected %d %s matches total.', len(all_data), sport)
 

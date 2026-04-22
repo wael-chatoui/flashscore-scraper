@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .config import config, setup_logging
-from .sheets import inject_original_formulas, inject_to_google_sheets
+from .sheets import inject_original_formulas, inject_to_all_sports_log, inject_to_google_sheets
 from .sort_sheet import sort_sheet_by_date
 
 logger = logging.getLogger(__name__)
@@ -223,6 +223,17 @@ async def main() -> None:
             inject_original_formulas()
         else:
             logger.info('\n[4/4] Skipping formula injection (%s).\n', sport)
+
+        # Inject to unified all-sports log (if configured)
+        log_sheet_id = config.google.all_sports_log_spreadsheet_id
+        if log_sheet_id:
+            logger.info('\n[+] Injecting to all-sports log...\n')
+            inject_to_all_sports_log(
+                match_data,
+                sport=sport,
+                spreadsheet_id=log_sheet_id,
+                tab_name=config.google.all_sports_log_tab_name,
+            )
 
     print_summary(match_data, sport)
     logger.info('Done!')

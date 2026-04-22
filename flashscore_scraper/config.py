@@ -32,6 +32,16 @@ class GoogleConfig:
         default_factory=lambda: os.getenv('FOOTBALL_SPREADSHEET_ID', '')
     )
 
+    # Unified all-sports log spreadsheet (optional)
+    all_sports_log_spreadsheet_id: str = field(
+        default_factory=lambda: os.getenv('ALL_SPORTS_LOG_SPREADSHEET_ID', '')
+    )
+
+    # Tab name for the all-sports log (default: Sheet1)
+    all_sports_log_tab_name: str = field(
+        default_factory=lambda: os.getenv('ALL_SPORTS_LOG_SHEET_TAB', 'Sheet1')
+    )
+
     # Path to Google service account credentials JSON file
     # Download from Google Cloud Console > APIs & Services > Credentials
     credentials_path: str = field(

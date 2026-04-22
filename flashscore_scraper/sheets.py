@@ -839,3 +839,211 @@ def inject_original_formulas() -> None:
         'Formulas injected: I, L, P-V, W, AA-AG, AI, AM-AS, AU-BA, BC-BF (rows 2-%d)',
         last_row,
     )
+
+
+# ---------------------------------------------------------------------------
+# All-sports unified log
+# ---------------------------------------------------------------------------
+
+# Column layout (A–BH, 60 columns total):
+#   A=Sport  B=Date  C=Time  D=Country  E=League
+#   F=Team A  G=Rank A  H=Team B  I=Rank B
+#   J=Score Home  K=Score Away                        (football only)
+#   L=VB Set3 A  M=VB Set4 A  N=VB Set5 A            (volleyball only)
+#   O=VB Set3 B  P=VB Set4 B  Q=VB Set5 B            (volleyball only)
+#   R=VB H2H Set3  S=VB H2H Set4  T=VB H2H Set5      (volleyball only)
+#   U..AN = Team A raw scores 1–20  (hockey ≤15, football ≤20)
+#   AO..BH = Team B raw scores 1–20
+
+ALL_SPORTS_LOG_HEADER = [
+    'Sport', 'Date', 'Heure', 'Pays', 'Ligue', 'Equipe A', 'Rang A', 'Equipe B', 'Rang B',
+    'Score Dom.', 'Score Ext.',
+    'VB Set3 A', 'VB Set4 A', 'VB Set5 A',
+    'VB Set3 B', 'VB Set4 B', 'VB Set5 B',
+    'VB H2H Set3', 'VB H2H Set4', 'VB H2H Set5',
+    *[f'Score A{i}' for i in range(1, 21)],
+    *[f'Score B{i}' for i in range(1, 21)],
+]
+
+_LOG_LAST_COL = 'BH'  # 60th column
+
+
+def _delete_rows_by_sport_and_date(
+    sheets, spreadsheet_id: str, sheet_id: int, sport: str, target_date: str
+) -> int:
+    """Delete rows where col A == sport and col B == target_date (bottom-up)."""
+    values = _read_values(sheets, spreadsheet_id, sheet_id, 'A', 'B')
+    if not values or len(values) < 2:
+        return 0
+
+    col_a = values[0]
+    col_b = values[1]
+
+    matching_rows = []
+    for i in range(1, max(len(col_a), len(col_b))):  # skip header row 0
+        sport_val = str(col_a[i]).strip() if i < len(col_a) else ''
+        date_val = str(col_b[i]).strip() if i < len(col_b) else ''
+        if sport_val == sport and date_val == target_date:
+            matching_rows.append(i + 1)  # 1-indexed sheet row
+
+    if not matching_rows:
+        return 0
+
+    requests = [
+        {
+            'deleteDimension': {
+                'range': {
+                    'sheetId': sheet_id,
+                    'dimension': 'ROWS',
+                    'startIndex': row - 1,
+                    'endIndex': row,
+                }
+            }
+        }
+        for row in sorted(matching_rows, reverse=True)
+    ]
+    sheets.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id, body={'requests': requests}
+    ).execute()
+    return len(matching_rows)
+
+
+def inject_to_all_sports_log(
+    match_data: list[dict[str, Any]],
+    sport: str,
+    spreadsheet_id: str,
+    tab_name: str = 'Sheet1',
+) -> None:
+    """Append match data to the unified all-sports log sheet.
+
+    Deduplicates by (sport, date): existing rows for the same combination are
+    removed before writing so re-runs replace rather than duplicate.
+    Writes the header row automatically if row 1 is empty.
+    """
+    if not match_data:
+        return
+
+    match_data = [
+        m for m in match_data if m.get('teamA', '').strip() and m.get('teamB', '').strip()
+    ]
+    if not match_data:
+        return
+
+    sheets_client = get_google_sheets_client()
+    sheet_props = _get_sheet_props(sheets_client, spreadsheet_id, tab_name)
+    sheet_id = sheet_props['sheetId']
+
+    # Write header if row 1 is empty
+    header_check = _read_values(sheets_client, spreadsheet_id, sheet_id, 'A', start_row=1)
+    if not header_check or not header_check[0]:
+        logger.info('Writing header row to "%s"...', tab_name)
+        _write_values(
+            sheets_client,
+            spreadsheet_id,
+            sheet_id,
+            [
+                {
+                    'start_col': 'A',
+                    'end_col': _LOG_LAST_COL,
+                    'start_row': 1,
+                    'values': [ALL_SPORTS_LOG_HEADER],
+                }
+            ],
+        )
+
+    # Deduplicate: delete existing rows for the same (sport, date) pairs
+    dates_in_batch = {m.get('date', '') for m in match_data if m.get('date')}
+    total_deleted = 0
+    for date_str in dates_in_batch:
+        deleted = _delete_rows_by_sport_and_date(
+            sheets_client, spreadsheet_id, sheet_id, sport, date_str
+        )
+        total_deleted += deleted
+    if total_deleted:
+        logger.info(
+            'All-sports log dedup: removed %d existing %s rows', total_deleted, sport
+        )
+
+    # Append after last used row
+    next_empty = find_next_empty_row(sheets_client, spreadsheet_id, sheet_id)
+    start_row = max(2, next_empty)
+    end_row = start_row + len(match_data) - 1
+
+    # Expand sheet if needed
+    sheet_props = _get_sheet_props(sheets_client, spreadsheet_id, tab_name)
+    current_rows = sheet_props['gridProperties']['rowCount']
+    if end_row > current_rows:
+        rows_to_add = end_row - current_rows
+        sheets_client.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={
+                'requests': [
+                    {
+                        'appendDimension': {
+                            'sheetId': sheet_id,
+                            'dimension': 'ROWS',
+                            'length': rows_to_add,
+                        }
+                    }
+                ]
+            },
+        ).execute()
+
+    # Build rows
+    rows: list[list[Any]] = []
+    for m in match_data:
+        a_vb = m.get('teamAStats', {})
+        b_vb = m.get('teamBStats', {})
+        h2h = m.get('h2hStats', {})
+        a_scores = list(m.get('teamAScores', []))
+        b_scores = list(m.get('teamBScores', []))
+
+        def _vb(stats: dict, key: str) -> Any:
+            """Return stat value, or '' if stats are empty/missing."""
+            if not stats or all(v == 0 for v in stats.values()):
+                return ''
+            return stats.get(key, '')
+
+        row: list[Any] = [
+            sport,
+            m.get('date', ''),
+            m.get('time', ''),
+            m.get('country', ''),
+            m.get('league', ''),
+            m.get('teamA', ''),
+            m.get('rankA', ''),
+            m.get('teamB', ''),
+            m.get('rankB', ''),
+            m.get('scoreHome', ''),
+            m.get('scoreAway', ''),
+            # Volleyball set counts (blank for hockey/football)
+            _vb(a_vb, 'count3'), _vb(a_vb, 'count4'), _vb(a_vb, 'count5'),
+            _vb(b_vb, 'count3'), _vb(b_vb, 'count4'), _vb(b_vb, 'count5'),
+            _vb(h2h, 'count3'), _vb(h2h, 'count4'), _vb(h2h, 'count5'),
+            # Raw score slots (20 each, padded with '')
+            *(a_scores + [''] * 20)[:20],
+            *(b_scores + [''] * 20)[:20],
+        ]
+        rows.append(row)
+
+    _write_values(
+        sheets_client,
+        spreadsheet_id,
+        sheet_id,
+        [
+            {
+                'start_col': 'A',
+                'end_col': _LOG_LAST_COL,
+                'start_row': start_row,
+                'values': rows,
+            }
+        ],
+    )
+    logger.info(
+        'All-sports log: wrote %d %s matches to "%s" rows %d-%d',
+        len(match_data),
+        sport,
+        tab_name,
+        start_row,
+        end_row,
+    )
