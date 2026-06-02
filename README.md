@@ -36,3 +36,5 @@ Un push sur `main` déclenche le pipeline GitHub Actions (lint, tests, déploiem
 # Docker avec scheduler (scripts Docker montés, 1h00 UTC chaque jour)
 docker compose --profile scheduled up -d
 ```
+
+Documentation d'exploitation du VPS : [docs/VPS.md](docs/VPS.md)
