@@ -8,6 +8,8 @@ __pycache__/
 venv/
 env/
 *.egg-info/
+.pytest_cache/
+.ruff_cache/
 dist/
 build/
 
@@ -38,3 +40,9 @@ Thumbs.db
 
 # Test outputs
 test-results.json
+
+# Local agent/editor artifacts
+.agents/
+.claude/settings.local.json
+/debug/
+/notes.txt
